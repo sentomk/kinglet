@@ -1,0 +1,18 @@
+set_default_toolchain("//build/toolchain:default")
+
+default_configs = [
+  "//build/config:compiler",
+  "//build/config:warnings",
+]
+
+set_defaults("executable") {
+  configs = default_configs
+}
+
+set_defaults("static_library") {
+  configs = default_configs
+}
+
+set_defaults("source_set") {
+  configs = default_configs
+}

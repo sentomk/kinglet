@@ -1,0 +1,10 @@
+static_library("types") {
+  sources = [
+    "types.cc",
+    "types.h",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

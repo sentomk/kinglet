@@ -1,0 +1,20 @@
+config("compiler") {
+  cflags_cc = [
+    "-std=c++20",
+  ]
+
+  defines = []
+}
+
+config("warnings") {
+  cflags = [
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+  ]
+
+  cflags_cc = [
+    "-Wconversion",
+    "-Wsign-conversion",
+  ]
+}

@@ -1,0 +1,15 @@
+static_library("checker") {
+  sources = [
+    "type_checker.cc",
+    "type_checker.h",
+  ]
+
+  deps = [
+    "//src/ast",
+    "//src/types",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

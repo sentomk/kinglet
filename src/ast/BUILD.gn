@@ -1,0 +1,10 @@
+static_library("ast") {
+  sources = [
+    "ast.cc",
+    "ast.h",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

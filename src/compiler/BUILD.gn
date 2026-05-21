@@ -1,0 +1,15 @@
+static_library("compiler") {
+  sources = [
+    "compiler.cc",
+    "compiler.h",
+  ]
+
+  deps = [
+    "//src/ast",
+    "//src/vm",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

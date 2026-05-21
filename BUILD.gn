@@ -1,0 +1,23 @@
+group("default") {
+  deps = [
+    ":kinglet",
+  ]
+}
+
+executable("kinglet") {
+  sources = [
+    "src/kinglet/main.cc",
+  ]
+
+  deps = [
+    "//src/checker",
+    "//src/compiler",
+    "//src/lexer",
+    "//src/parser",
+    "//src/vm",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

@@ -1,0 +1,12 @@
+static_library("lexer") {
+  sources = [
+    "scanner.cc",
+    "scanner.h",
+    "token.cc",
+    "token.h",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}
