@@ -1,4 +1,8 @@
-set_default_toolchain("//build/toolchain:default")
+if (host_os == "win") {
+  set_default_toolchain("//build/toolchain:win")
+} else {
+  set_default_toolchain("//build/toolchain:unix")
+}
 
 default_configs = [
   "//build/config:compiler",

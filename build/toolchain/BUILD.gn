@@ -1,51 +1,105 @@
-toolchain("default") {
-  tool("cc") {
-    depfile = "{{output}}.d"
-    command = "clang -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
-    depsformat = "gcc"
-    description = "CC {{output}}"
-    outputs = [
-      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
-    ]
-  }
+if (host_os == "win") {
+  toolchain("win") {
+    tool("cc") {
+      depfile = "{{output}}.d"
+      command = "clang -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.obj",
+      ]
+    }
 
-  tool("cxx") {
-    depfile = "{{output}}.d"
-    command = "clang++ -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
-    depsformat = "gcc"
-    description = "CXX {{output}}"
-    outputs = [
-      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
-    ]
-  }
+    tool("cxx") {
+      depfile = "{{output}}.d"
+      command = "clang++ -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.obj",
+      ]
+    }
 
-  tool("alink") {
-    command = "rm -f {{output}} && ar rcs {{output}} {{inputs}}"
-    description = "AR {{target_output_name}}{{output_extension}}"
-    outputs = [
-      "{{target_out_dir}}/{{target_output_name}}{{output_extension}}",
-    ]
-    default_output_extension = ".a"
-    output_prefix = "lib"
-  }
+    tool("alink") {
+      command = "cmd /c del /f {{output}} 2>nul & llvm-ar rcs {{output}} {{inputs}}"
+      description = "AR {{target_output_name}}{{output_extension}}"
+      outputs = [
+        "{{target_out_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+      default_output_extension = ".lib"
+      output_prefix = ""
+    }
 
-  tool("link") {
-    rspfile = "{{output}}.rsp"
-    command = "clang++ {{ldflags}} -o {{output}} @$rspfile {{libs}}"
-    description = "LINK {{target_output_name}}{{output_extension}}"
-    rspfile_content = "{{inputs}}"
-    outputs = [
-      "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
-    ]
-  }
+    tool("link") {
+      rspfile = "{{output}}.rsp"
+      command = "clang++ {{ldflags}} -o {{output}} @$rspfile {{libs}}"
+      description = "LINK {{target_output_name}}{{output_extension}}"
+      rspfile_content = "{{inputs}}"
+      outputs = [
+        "{{root_out_dir}}/{{target_output_name}}.exe",
+      ]
+    }
 
-  tool("stamp") {
-    command = "touch {{output}}"
-    description = "STAMP {{output}}"
-  }
+    tool("stamp") {
+      command = "cmd /c type nul > {{output}}"
+      description = "STAMP {{output}}"
+    }
 
-  tool("copy") {
-    command = "cp -af {{source}} {{output}}"
-    description = "COPY {{source}} {{output}}"
+    tool("copy") {
+      command = "cmd /c copy /y {{source}} {{output}} >nul"
+      description = "COPY {{source}} {{output}}"
+    }
+  }
+} else {
+  toolchain("unix") {
+    tool("cc") {
+      depfile = "{{output}}.d"
+      command = "clang -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+      ]
+    }
+
+    tool("cxx") {
+      depfile = "{{output}}.d"
+      command = "clang++ -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o",
+      ]
+    }
+
+    tool("alink") {
+      command = "rm -f {{output}} && ar rcs {{output}} {{inputs}}"
+      description = "AR {{target_output_name}}{{output_extension}}"
+      outputs = [
+        "{{target_out_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+      default_output_extension = ".a"
+      output_prefix = "lib"
+    }
+
+    tool("link") {
+      rspfile = "{{output}}.rsp"
+      command = "clang++ {{ldflags}} -o {{output}} @$rspfile {{libs}}"
+      description = "LINK {{target_output_name}}{{output_extension}}"
+      rspfile_content = "{{inputs}}"
+      outputs = [
+        "{{root_out_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+    }
+
+    tool("stamp") {
+      command = "touch {{output}}"
+      description = "STAMP {{output}}"
+    }
+
+    tool("copy") {
+      command = "cp -af {{source}} {{output}}"
+      description = "COPY {{source}} {{output}}"
+    }
   }
 }
