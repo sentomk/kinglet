@@ -103,6 +103,10 @@ ast::DeclPtr Parser::declaration() {
     return import_declaration();
   }
 
+  if (match(TokenType::USING)) {
+    return using_declaration();
+  }
+
   if (is_function_declaration_start()) {
     return function_declaration();
   }
@@ -121,6 +125,13 @@ ast::DeclPtr Parser::import_declaration() {
   const Token &name = consume(TokenType::IDENTIFIER, "Expected module name after import.");
   consume(TokenType::SEMICOLON, "Expected ';' after import.");
   return std::make_unique<ast::ImportDecl>(location_of(import_token), token_text(name));
+}
+
+ast::DeclPtr Parser::using_declaration() {
+  const Token &using_token = previous();
+  const Token &name = consume(TokenType::IDENTIFIER, "Expected namespace name after 'using'.");
+  consume(TokenType::SEMICOLON, "Expected ';' after using declaration.");
+  return std::make_unique<ast::UsingDecl>(location_of(using_token), token_text(name));
 }
 
 ast::DeclPtr Parser::function_declaration() {
@@ -374,6 +385,12 @@ ast::ExprPtr Parser::primary() {
   }
   if (match(TokenType::IDENTIFIER)) {
     const Token &identifier = previous();
+    if (match(TokenType::COLON_COLON)) {
+      const Token &member =
+          consume(TokenType::IDENTIFIER, "Expected member name after '::'.");
+      return std::make_unique<ast::NamespaceAccessExpr>(
+          location_of(identifier), token_text(identifier), token_text(member));
+    }
     return std::make_unique<ast::IdentifierExpr>(location_of(identifier), token_text(identifier));
   }
   if (match(TokenType::LEFT_PAREN)) {
