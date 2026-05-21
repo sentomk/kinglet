@@ -299,6 +299,24 @@ void ImportDecl::print(std::ostream &out, int indent) const {
   out << "(import " << module << ")";
 }
 
+UsingDecl::UsingDecl(SourceLocation location, std::string namespace_name)
+    : Decl(location), namespace_name(std::move(namespace_name)) {}
+
+void UsingDecl::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(using " << namespace_name << ")";
+}
+
+NamespaceAccessExpr::NamespaceAccessExpr(SourceLocation location, std::string namespace_name,
+                                         std::string member_name)
+    : Expr(location), namespace_name(std::move(namespace_name)),
+      member_name(std::move(member_name)) {}
+
+void NamespaceAccessExpr::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(namespace-access " << namespace_name << "::" << member_name << ")";
+}
+
 TopLevelStmtDecl::TopLevelStmtDecl(SourceLocation location, StmtPtr stmt)
     : Decl(location), stmt(std::move(stmt)) {}
 

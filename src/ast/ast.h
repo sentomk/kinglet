@@ -228,6 +228,22 @@ struct ImportDecl final : Decl {
   std::string module;
 };
 
+struct UsingDecl final : Decl {
+  UsingDecl(SourceLocation location, std::string namespace_name);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  std::string namespace_name;
+};
+
+struct NamespaceAccessExpr final : Expr {
+  NamespaceAccessExpr(SourceLocation location, std::string namespace_name,
+                      std::string member_name);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  std::string namespace_name;
+  std::string member_name;
+};
+
 struct TopLevelStmtDecl final : Decl {
   TopLevelStmtDecl(SourceLocation location, StmtPtr stmt);
   void print(std::ostream &out, int indent = 0) const override;
