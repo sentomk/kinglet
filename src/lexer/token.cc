@@ -48,6 +48,8 @@ const char *token_type_name(TokenType type) {
     return "EXPORT";
   case TokenType::NAMESPACE:
     return "NAMESPACE";
+  case TokenType::USING:
+    return "USING";
   case TokenType::STRUCT:
     return "STRUCT";
   case TokenType::ENUM:

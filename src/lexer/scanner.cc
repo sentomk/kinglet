@@ -371,6 +371,7 @@ TokenType Scanner::identifier_type() const {
       {"import", TokenType::IMPORT},
       {"export", TokenType::EXPORT},
       {"namespace", TokenType::NAMESPACE},
+      {"using", TokenType::USING},
       {"struct", TokenType::STRUCT},
       {"enum", TokenType::ENUM},
       {"trait", TokenType::TRAIT},
