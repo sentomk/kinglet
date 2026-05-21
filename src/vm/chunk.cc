@@ -52,7 +52,7 @@ void Chunk::disassemble(std::ostream &out) const {
         << opcode_name(instruction.op);
     if (instruction.op == OpCode::Constant) {
       out << " #" << instruction.operand << " ("
-          << constants_[instruction.operand] << ")";
+          << constants_[static_cast<std::size_t>(instruction.operand)] << ")";
     } else if (instruction.op == OpCode::LoadLocal ||
                instruction.op == OpCode::StoreLocal) {
       out << " slot " << instruction.operand;

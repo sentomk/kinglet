@@ -153,19 +153,19 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
 }
 
 Type TypeChecker::check_expr(const ast::Expr &expr) {
-  if (const auto *int_lit = dynamic_cast<const ast::IntLiteralExpr *>(&expr)) {
+  if (dynamic_cast<const ast::IntLiteralExpr *>(&expr)) {
     return int_type();
   }
 
-  if (const auto *float_lit = dynamic_cast<const ast::FloatLiteralExpr *>(&expr)) {
+  if (dynamic_cast<const ast::FloatLiteralExpr *>(&expr)) {
     return float_type();
   }
 
-  if (const auto *string_lit = dynamic_cast<const ast::StringLiteralExpr *>(&expr)) {
+  if (dynamic_cast<const ast::StringLiteralExpr *>(&expr)) {
     return string_type();
   }
 
-  if (const auto *bool_lit = dynamic_cast<const ast::BoolLiteralExpr *>(&expr)) {
+  if (dynamic_cast<const ast::BoolLiteralExpr *>(&expr)) {
     return bool_type();
   }
 
