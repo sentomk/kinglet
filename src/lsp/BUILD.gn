@@ -1,9 +1,16 @@
 static_library("lsp") {
   sources = [
+    "analysis.cc",
+    "analysis.h",
+    "document_store.cc",
+    "document_store.h",
     "json.cc",
     "json.h",
-    "lsp_server.cc",
-    "lsp_server.h",
+    "protocol.h",
+    "server.cc",
+    "server.h",
+    "transport.cc",
+    "transport.h",
   ]
 
   deps = [

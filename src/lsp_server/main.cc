@@ -1,4 +1,4 @@
-#include "lsp/lsp_server.h"
+#include "lsp/server.h"
 
 int main() {
   kinglet::lsp::Server server;
