@@ -220,10 +220,29 @@ json::Value Server::handle_completion(const json::Value &params) {
     items.push_back(protocol::completion_item(sym->name, kind, detail));
   }
 
-  // Keywords
-  for (const char *kw : {"if", "else", "for", "while", "break", "continue", "return",
-                          "inspect", "using", "namespace", "const", "import", "export",
-                          "struct", "enum", "trait", "spawn", "select",
+  // Snippet completions for control flow / declarations
+  struct Snippet { const char *label; const char *body; const char *detail; };
+  Snippet snippets[] = {
+    {"if", "if (${1:condition}) {\n\t$0\n}", "if statement"},
+    {"if else", "if (${1:condition}) {\n\t$2\n} else {\n\t$0\n}", "if-else statement"},
+    {"for", "for (${1:int i = 0}; ${2:i < n}; ${3:i += 1}) {\n\t$0\n}", "for loop"},
+    {"while", "while (${1:condition}) {\n\t$0\n}", "while loop"},
+    {"inspect", "inspect (${1:expr}) {\n\t${2:_} => ${0:result}\n}", "pattern match"},
+    {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration"},
+    {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition"},
+    {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
+    {"using namespace", "using namespace ${1:io};", "namespace import"},
+    {"return", "return ${0:expr};", "return statement"},
+  };
+  for (const auto &s : snippets) {
+    if (!prefix.empty() && std::string(s.label).find(prefix) == std::string::npos) continue;
+    items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
+  }
+
+  // Plain keywords (no snippet expansion needed)
+  for (const char *kw : {"else", "break", "continue",
+                          "using", "namespace", "const", "import", "export",
+                          "trait", "spawn", "select",
                           "int", "float", "double", "bool", "string", "void", "byte", "auto",
                           "true", "false", "null"}) {
     if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
