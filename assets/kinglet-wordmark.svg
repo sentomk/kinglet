@@ -1,0 +1,30 @@
+<svg width="1320" height="360" viewBox="0 0 1320 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wordmark" x1="40" y1="70" x2="1190" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF7EA"/>
+      <stop offset="1" stop-color="#F4E1B9"/>
+    </linearGradient>
+  </defs>
+
+  <g stroke="url(#wordmark)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M82 62V278"/>
+    <path d="M82 192L180 104"/>
+    <path d="M82 192L183 277"/>
+
+    <path d="M277 115V278"/>
+    <path d="M277 57H278"/>
+
+    <path d="M397 278V163C397 130 424 103 457 103C490 103 517 130 517 163V278"/>
+
+    <path d="M655 163C655 130 628 103 595 103C562 103 535 130 535 163V218C535 251 562 278 595 278C628 278 655 251 655 218V163Z"/>
+    <path d="M654 219V248C654 292 618 328 574 328C547 328 524 318 507 300"/>
+
+    <path d="M760 57V278"/>
+
+    <path d="M982 190C982 238 943 277 895 277C847 277 808 238 808 190C808 142 847 103 895 103C943 103 982 142 982 190Z"/>
+    <path d="M862 205L956 152"/>
+
+    <path d="M1093 62V278"/>
+    <path d="M1058 115H1128"/>
+  </g>
+</svg>

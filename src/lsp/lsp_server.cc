@@ -161,6 +161,8 @@ void Server::handle_did_change(const json::Value &params) {
       return;
     }
   }
+  // Not found — treat as didOpen
+  documents_.push_back(TextDocument{std::move(uri), std::move(new_text)});
 }
 
 void Server::send_diagnostics(const TextDocument &doc) {
@@ -252,11 +254,15 @@ json::Value Server::handle_completion(const json::Value &params) {
     std::size_t s = e;
     while (s > 0 && std::isalnum(static_cast<unsigned char>(before[s - 1]))) --s;
     ns_name = before.substr(s, e - s);
-    std::cerr << "[kinglet-lsp] before='" << before << "' ns='" << ns_name
-              << "' l=" << line << " c=" << character << std::endl;
   }
 
   if (!ns_name.empty()) {
+    // Compute the column where the namespace name starts
+    int ns_start_col = static_cast<int>(before.size()) - 2; // back past '::'
+    if (ns_start_col >= 1 && before[static_cast<std::size_t>(ns_start_col - 1)] == ':') --ns_start_col;
+    while (ns_start_col > 0 && std::isalnum(static_cast<unsigned char>(before[static_cast<std::size_t>(ns_start_col - 1)])))
+      --ns_start_col;
+
     if (ns_name == "io") {
       for (auto [name, detail] : {
                std::pair{"out", "stdout output, no newline"},
@@ -266,6 +272,22 @@ json::Value Server::handle_completion(const json::Value &params) {
         item["label"] = json::Value::string(name);
         item["kind"] = json::Value::number(3);
         item["detail"] = json::Value::string(detail);
+
+        // Replace "io::" (or "io:") with "io::out" etc.
+        json::Object edit;
+        json::Object range;
+        json::Object start;
+        start["line"] = json::Value::number(line);
+        start["character"] = json::Value::number(ns_start_col);
+        range["start"] = json::Value(start);
+        json::Object end;
+        end["line"] = json::Value::number(line);
+        end["character"] = json::Value::number(character);
+        range["end"] = json::Value(end);
+        edit["range"] = json::Value(range);
+        edit["newText"] = json::Value::string(ns_name + "::" + name);
+        item["textEdit"] = json::Value(edit);
+
         items.push_back(json::Value(item));
       }
     }
