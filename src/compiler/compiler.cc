@@ -372,7 +372,8 @@ void Compiler::compile_expr(const ast::Expr &expr) {
 
     const auto *ns_callee =
         dynamic_cast<const ast::NamespaceAccessExpr *>(call_expr->callee.get());
-    if (ns_callee && ns_callee->namespace_name == "io") {
+    if (ns_callee && used_.count(ns_callee->namespace_name) != 0 &&
+        ns_callee->namespace_name == "io") {
       if (ns_callee->member_name == "out") {
         for (const ast::ExprPtr &arg : call_expr->args) {
           compile_expr(*arg);

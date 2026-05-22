@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
         bool found = false;
         for (const char *rt : return_types) {
           wrapped_source =
-              std::string(rt) + " main() => " + expr + ";";
+              "using io; " + std::string(rt) + " main() => " + expr + ";";
           kinglet::Scanner test_scanner(wrapped_source);
           auto test_tokens = test_scanner.scan_tokens();
           kinglet::Parser test_parser(test_tokens);
