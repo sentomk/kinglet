@@ -225,9 +225,15 @@ json::Value Server::handle_completion(const json::Value &params) {
                           "inspect", "using", "namespace", "const", "import", "export",
                           "struct", "enum", "trait", "spawn", "select",
                           "int", "float", "double", "bool", "string", "void", "byte", "auto",
-                          "true", "false", "null", "io"}) {
+                          "true", "false", "null"}) {
     if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
     items.push_back(protocol::completion_item(kw, 14));
+  }
+
+  // Namespace completions — insert with trailing '::'
+  for (const char *ns : {"io"}) {
+    if (!prefix.empty() && std::string(ns).find(prefix) == std::string::npos) continue;
+    items.push_back(protocol::completion_item(ns, 9, "namespace", std::string(ns) + "::"));
   }
 
   return json::Value(items);
