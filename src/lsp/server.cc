@@ -266,11 +266,21 @@ json::Value Server::handle_completion(const json::Value &params) {
     items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
   }
 
-  // Plain keywords — insert with trailing space for those expecting arguments
+  // Type keywords — highest priority
+  for (const char *kw : {"int", "float", "double", "bool", "string", "void", "byte", "auto"}) {
+    if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
+    json::Object item;
+    item["label"] = json::Value::string(kw);
+    item["kind"] = json::Value::number(14);
+    item["insertText"] = json::Value::string(std::string(kw) + " ");
+    item["sortText"] = json::Value::string("0" + std::string(kw));
+    items.push_back(json::Value(item));
+  }
+
+  // Control flow keywords
   const char *kw_with_space[] = {"if", "else", "for", "while", "return",
                                   "inspect", "const", "export",
-                                  "struct", "enum", "trait", "spawn", "select",
-                                  "int", "float", "double", "bool", "string", "void", "byte", "auto"};
+                                  "struct", "enum", "trait", "spawn", "select"};
   const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
   for (const char *kw : kw_with_space) {
     if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
