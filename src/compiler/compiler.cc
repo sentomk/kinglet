@@ -39,6 +39,19 @@ CompileResult Compiler::compile(const ast::Program &program) {
   return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_)};
 }
 
+void Compiler::push_scope() {
+  scope_stack_.push_back(locals_.size());
+}
+
+void Compiler::pop_scope() {
+  if (scope_stack_.empty()) return;
+  const std::size_t target = scope_stack_.back();
+  scope_stack_.pop_back();
+  while (locals_.size() > target) {
+    locals_.pop_back();
+  }
+}
+
 void Compiler::compile_function(const ast::FunctionDecl &function) {
   if (!function.params.empty()) {
     error_at(function.location, "main parameters are not supported yet.");
@@ -49,12 +62,14 @@ void Compiler::compile_function(const ast::FunctionDecl &function) {
 
 void Compiler::compile_stmt(const ast::Stmt &stmt) {
   if (const auto *block = dynamic_cast<const ast::BlockStmt *>(&stmt)) {
+    push_scope();
     for (const ast::StmtPtr &statement : block->statements) {
       compile_stmt(*statement);
       if (!errors_.empty()) {
         return;
       }
     }
+    pop_scope();
     return;
   }
 
@@ -105,15 +120,77 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
   }
 
   if (const auto *while_stmt = dynamic_cast<const ast::WhileStmt *>(&stmt)) {
+    loop_stack_.emplace_back();
+
     const std::size_t loop_start = chunk_.instructions().size();
     compile_expr(*while_stmt->condition);
-    const std::size_t exit_jump = emit_jump(OpCode::JmpFalse, while_stmt->location);
+    loop_stack_.back().break_jumps.push_back(emit_jump(OpCode::JmpFalse, while_stmt->location));
     compile_stmt(*while_stmt->body);
     const std::size_t loop_jump = emit_jump(OpCode::Jmp, while_stmt->location);
-    // Calculate offset back to loop_start
-    Instruction &jmp = const_cast<Instruction &>(chunk_.instructions()[loop_jump]);
-    jmp.operand = static_cast<int32_t>(loop_start - loop_jump - 1);
-    patch_jump(exit_jump);
+    patch_jump_to(loop_jump, loop_start);
+
+    for (std::size_t jump : loop_stack_.back().break_jumps) {
+      patch_jump(jump);
+    }
+    for (std::size_t jump : loop_stack_.back().continue_jumps) {
+      patch_jump_to(jump, loop_start);
+    }
+    loop_stack_.pop_back();
+    return;
+  }
+
+  if (const auto *for_stmt = dynamic_cast<const ast::ForStmt *>(&stmt)) {
+    push_scope();
+    loop_stack_.emplace_back();
+
+    if (for_stmt->init) {
+      compile_stmt(*for_stmt->init);
+    }
+
+    const std::size_t loop_start = chunk_.instructions().size();
+    if (for_stmt->condition) {
+      compile_expr(*for_stmt->condition);
+      loop_stack_.back().break_jumps.push_back(emit_jump(OpCode::JmpFalse, for_stmt->location));
+    }
+    compile_stmt(*for_stmt->body);
+
+    const std::size_t step_start = chunk_.instructions().size();
+    for (std::size_t jump : loop_stack_.back().continue_jumps) {
+      patch_jump_to(jump, step_start);
+    }
+
+    if (for_stmt->step) {
+      compile_stmt(*for_stmt->step);
+    }
+
+    const std::size_t loop_jump = emit_jump(OpCode::Jmp, for_stmt->location);
+    patch_jump_to(loop_jump, loop_start);
+
+    for (std::size_t jump : loop_stack_.back().break_jumps) {
+      patch_jump(jump);
+    }
+    loop_stack_.pop_back();
+    pop_scope();
+    return;
+  }
+
+  if (dynamic_cast<const ast::BreakStmt *>(&stmt)) {
+    if (loop_stack_.empty()) {
+      error_at(stmt.location, "break must be inside a loop.");
+      return;
+    }
+    const std::size_t jump = emit_jump(OpCode::Jmp, stmt.location);
+    loop_stack_.back().break_jumps.push_back(jump);
+    return;
+  }
+
+  if (dynamic_cast<const ast::ContinueStmt *>(&stmt)) {
+    if (loop_stack_.empty()) {
+      error_at(stmt.location, "continue must be inside a loop.");
+      return;
+    }
+    const std::size_t jump = emit_jump(OpCode::Jmp, stmt.location);
+    loop_stack_.back().continue_jumps.push_back(jump);
     return;
   }
 
@@ -355,7 +432,10 @@ std::size_t Compiler::emit_jump(OpCode op, ast::SourceLocation location) {
 }
 
 void Compiler::patch_jump(std::size_t offset) {
-  const std::size_t target = chunk_.instructions().size();
+  patch_jump_to(offset, chunk_.instructions().size());
+}
+
+void Compiler::patch_jump_to(std::size_t offset, std::size_t target) {
   const int32_t jump_offset = static_cast<int32_t>(target - offset - 1);
   Instruction &instruction = const_cast<Instruction &>(chunk_.instructions()[offset]);
   instruction.operand = jump_offset;
