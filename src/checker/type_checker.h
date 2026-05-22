@@ -42,6 +42,7 @@ private:
 
   std::vector<std::unordered_map<std::string, VarInfo>> scopes_;
   std::vector<TypeError> errors_;
+  int loop_depth_ = 0;
 };
 
 } // namespace kinglet

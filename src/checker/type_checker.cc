@@ -152,7 +152,44 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {
       error_at(while_stmt->location, "Condition must be Bool or Int.");
     }
+    ++loop_depth_;
     check_stmt(*while_stmt->body, expected_return);
+    --loop_depth_;
+    return;
+  }
+
+  if (const auto *for_stmt = dynamic_cast<const ast::ForStmt *>(&stmt)) {
+    push_scope();
+    if (for_stmt->init) {
+      check_stmt(*for_stmt->init, expected_return);
+    }
+    if (for_stmt->condition) {
+      Type cond_type = check_expr(*for_stmt->condition);
+      if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {
+        error_at(for_stmt->location, "Condition must be Bool or Int.");
+      }
+    }
+    if (for_stmt->step) {
+      check_stmt(*for_stmt->step, expected_return);
+    }
+    ++loop_depth_;
+    check_stmt(*for_stmt->body, expected_return);
+    --loop_depth_;
+    pop_scope();
+    return;
+  }
+
+  if (dynamic_cast<const ast::BreakStmt *>(&stmt)) {
+    if (loop_depth_ <= 0) {
+      error_at(stmt.location, "break must be inside a loop.");
+    }
+    return;
+  }
+
+  if (dynamic_cast<const ast::ContinueStmt *>(&stmt)) {
+    if (loop_depth_ <= 0) {
+      error_at(stmt.location, "continue must be inside a loop.");
+    }
     return;
   }
 }
