@@ -137,6 +137,9 @@ std::string to_string(const Value &val) {
   if (val.is_string()) {
     return "\"" + escape_json(val.as_string()) + "\"";
   }
+  if (val.is_bool()) {
+    return val.as_bool() ? "true" : "false";
+  }
   if (val.is_number()) {
     std::ostringstream oss;
     oss << val.as_number();
