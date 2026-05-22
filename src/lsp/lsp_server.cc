@@ -5,6 +5,7 @@
 #include "lexer/scanner.h"
 #include "parser/parser.h"
 
+#include <cctype>
 #include <iostream>
 #include <sstream>
 
@@ -21,14 +22,12 @@ void Server::run() {
 }
 
 std::string Server::read_message() {
-  // Read Content-Length: <N>\r\n\r\n<JSON>
   std::string line;
   long length = -1;
   while (std::getline(std::cin, line)) {
     if (line.empty() || line == "\r") continue;
     if (line.starts_with("Content-Length:")) {
       length = std::stol(line.substr(15));
-      // Read the blank line separator
       std::getline(std::cin, line);
       break;
     }
@@ -57,7 +56,6 @@ void Server::handle_message(const json::Value &msg) {
   auto params_it = obj.find("params");
   if (params_it != obj.end()) params = params_it->second;
 
-  // Get request id for response
   json::Value id = json::Value::null();
   auto id_it = obj.find("id");
   if (id_it != obj.end()) id = id_it->second;
@@ -87,7 +85,6 @@ void Server::handle_message(const json::Value &msg) {
     response["result"] = json::Value::null();
     write_message(json::Value(response));
   } else if (method == "exit") {
-    // Client will close the connection
   }
 }
 
@@ -101,20 +98,16 @@ void Server::send_notification(const std::string &method, const json::Value &par
 
 json::Value Server::handle_initialize(const json::Value &) {
   json::Object capabilities;
-
-  // Text document sync — we want full text on changes
   json::Object text_doc_sync;
   text_doc_sync["openClose"] = json::Value(true);
-  text_doc_sync["change"] = json::Value::number(2); // Incremental
+  text_doc_sync["change"] = json::Value::number(2);
   capabilities["textDocumentSync"] = json::Value(text_doc_sync);
 
-  // Diagnostic provider
   json::Object diagnostic_provider;
   diagnostic_provider["interFileDependencies"] = json::Value(false);
   diagnostic_provider["workspaceDiagnostics"] = json::Value(false);
   capabilities["diagnosticProvider"] = json::Value(diagnostic_provider);
 
-  // Completion provider
   json::Object completion_provider;
   json::Array trigger_chars;
   trigger_chars.push_back(json::Value::string("."));
@@ -141,7 +134,6 @@ void Server::handle_did_open(const json::Value &params) {
   auto uri_it = doc.find("uri");
   auto text_it = doc.find("text");
   if (uri_it == doc.end() || text_it == doc.end()) return;
-
   TextDocument td;
   td.uri = uri_it->second.as_string();
   td.text = text_it->second.as_string();
@@ -155,16 +147,13 @@ void Server::handle_did_change(const json::Value &params) {
   auto doc_it = p.find("textDocument");
   auto changes_it = p.find("contentChanges");
   if (doc_it == p.end() || changes_it == p.end()) return;
-
   const auto &doc = doc_it->second.as_object();
   auto uri_it = doc.find("uri");
   if (uri_it == doc.end()) return;
   std::string uri = uri_it->second.as_string();
-
   const auto &changes = changes_it->second.as_array();
   if (changes.empty()) return;
   std::string new_text = changes.back().as_object().at("text").as_string();
-
   for (auto &td : documents_) {
     if (td.uri == uri) {
       td.text = std::move(new_text);
@@ -176,11 +165,8 @@ void Server::handle_did_change(const json::Value &params) {
 
 void Server::send_diagnostics(const TextDocument &doc) {
   std::vector<Diagnostic> diagnostics;
-
-  // Run Kinglet pipeline
   Scanner scanner(doc.text);
   auto tokens = scanner.scan_tokens();
-
   bool has_lexer_error = false;
   for (const auto &token : tokens) {
     if (token.type == TokenType::ERROR) {
@@ -188,14 +174,12 @@ void Server::send_diagnostics(const TextDocument &doc) {
       has_lexer_error = true;
     }
   }
-
   if (!has_lexer_error) {
     Parser parser(tokens);
     auto parse_result = parser.parse();
     for (const auto &err : parse_result.errors) {
       diagnostics.push_back({err.line, err.column, err.message});
     }
-
     if (parse_result.errors.empty() && parse_result.program) {
       TypeChecker checker;
       auto type_result = checker.check(*parse_result.program);
@@ -204,8 +188,6 @@ void Server::send_diagnostics(const TextDocument &doc) {
       }
     }
   }
-
-  // Build JSON diagnostic array
   json::Array items;
   for (const auto &d : diagnostics) {
     json::Object item;
@@ -220,25 +202,22 @@ void Server::send_diagnostics(const TextDocument &doc) {
     range["end"] = json::Value(end);
     item["range"] = json::Value(range);
     item["message"] = json::Value::string(d.message);
-    item["severity"] = json::Value::number(1); // Error
+    item["severity"] = json::Value::number(1);
     item["source"] = json::Value::string("kinglet");
     items.push_back(json::Value(item));
   }
-
   json::Object diag_params;
   json::Object diag_uri;
   diag_uri["uri"] = json::Value::string(doc.uri);
   diag_uri["diagnostics"] = json::Value(items);
   diag_params["textDocument"] = json::Value(diag_uri);
-
   send_notification("textDocument/publishDiagnostics", json::Value(diag_params));
 }
 
 json::Value Server::handle_completion(const json::Value &params) {
   json::Array items;
-
-  // Find the document text
   if (!params.is_object()) return json::Value(items);
+
   const auto &p = params.as_object();
   auto doc_it = p.find("textDocument");
   auto pos_it = p.find("position");
@@ -248,72 +227,94 @@ json::Value Server::handle_completion(const json::Value &params) {
   auto uri_it = doc.find("uri");
   if (uri_it == doc.end()) return json::Value(items);
 
-  // Get current text
   std::string current_text;
   for (const auto &td : documents_) {
-    if (td.uri == uri_it->second.as_string()) {
-      current_text = td.text;
-      break;
-    }
+    if (td.uri == uri_it->second.as_string()) { current_text = td.text; break; }
   }
 
-  // Parse the document to get scope info
+  // Get cursor position and text before cursor
+  const auto &pos = pos_it->second.as_object();
+  int line = static_cast<int>(pos.at("line").as_number());
+  int character = static_cast<int>(pos.at("character").as_number());
+
+  int cline = 0;
+  std::string before;
+  for (std::size_t i = 0; i < current_text.size(); ++i) {
+    if (cline == line && static_cast<int>(before.size()) >= character) break;
+    if (cline == line) before += current_text[i];
+    if (current_text[i] == '\n') ++cline;
+  }
+
+  // Detect namespace:: completion
+  std::string ns_name;
+  if (before.size() >= 2 && before[before.size() - 1] == ':' && before[before.size() - 2] == ':') {
+    std::size_t e = before.size() - 2;
+    std::size_t s = e;
+    while (s > 0 && std::isalnum(static_cast<unsigned char>(before[s - 1]))) --s;
+    ns_name = before.substr(s, e - s);
+  }
+
+  if (!ns_name.empty()) {
+    if (ns_name == "io") {
+      for (auto [name, detail] : {
+               std::pair{"out", "stdout output, no newline"},
+               {"err", "stderr output"},
+               {"in", "stdin input"}}) {
+        json::Object item;
+        item["label"] = json::Value::string(name);
+        item["kind"] = json::Value::number(3);
+        item["detail"] = json::Value::string(detail);
+        items.push_back(json::Value(item));
+      }
+    }
+    return json::Value(items);
+  }
+
+  // General completions: keywords + types
+  for (const char *kw : {"if", "else", "for", "while", "break", "continue", "return",
+                          "inspect", "using", "namespace", "const", "import", "export",
+                          "struct", "enum", "trait", "spawn", "select",
+                          "int", "float", "double", "bool", "string", "void", "byte", "auto",
+                          "true", "false", "null", "io"}) {
+    json::Object item;
+    item["label"] = json::Value::string(kw);
+    item["kind"] = json::Value::number(14);
+    item["insertText"] = json::Value::string(kw);
+    items.push_back(json::Value(item));
+  }
+
+  // Snippets
+  for (auto [label, text] : {
+           std::pair{"inspect", "inspect (${1:expr}) {\n\t${2:_} => ${0:result}\n}"},
+           {"for", "for (${1:int i = 0}; $1 < ${2:n}; $1 += ${3:1}) {\n\t${0}\n}"},
+           {"if", "if (${1:cond}) {\n\t${0}\n}"},
+           {"while", "while (${1:cond}) {\n\t${0}\n}"},
+           {"fun", "int ${1:name}(${2:params}) {\n\t${0}\n}"},
+           {"using namespace", "using namespace ${1:io};"}}) {
+    json::Object item;
+    item["label"] = json::Value::string(label);
+    item["kind"] = json::Value::number(15);
+    item["insertText"] = json::Value::string(text);
+    item["insertTextFormat"] = json::Value::number(2);
+    items.push_back(json::Value(item));
+  }
+
+  // Variable/function completions from parsing
   Scanner scanner(current_text);
   auto tokens = scanner.scan_tokens();
   bool has_error = false;
   for (const auto &t : tokens) {
     if (t.type == TokenType::ERROR) { has_error = true; break; }
   }
-
-  // Always provide keyword + type completions
-  const char *keywords[] = {
-    "if", "else", "for", "while", "break", "continue", "return",
-    "inspect", "using", "namespace", "const", "import", "export",
-    "struct", "enum", "trait", "spawn", "select",
-    "int", "float", "double", "bool", "string", "void", "byte", "auto",
-    "true", "false", "null",
-    "io"
-  };
-
-  for (const char *kw : keywords) {
-    json::Object item;
-    item["label"] = json::Value::string(kw);
-    item["kind"] = json::Value::number(14); // Keyword
-    item["insertText"] = json::Value::string(kw);
-    items.push_back(json::Value(item));
-  }
-
-  // Add snippet completions
-  struct Snippet { const char *label; const char *text; };
-  const Snippet snippets[] = {
-    {"inspect", "inspect (${1:expr}) {\n\t${2:_} => ${0:result}\n}"},
-    {"for", "for (${1:int i = 0}; $1 < ${2:n}; $1 += ${3:1}) {\n\t${0}\n}"},
-    {"if", "if (${1:cond}) {\n\t${0}\n}"},
-    {"while", "while (${1:cond}) {\n\t${0}\n}"},
-    {"fun", "int ${1:name}(${2:params}) {\n\t${0}\n}"},
-    {"using namespace", "using namespace ${1:io};"},
-  };
-
-  for (const auto &s : snippets) {
-    json::Object item;
-    item["label"] = json::Value::string(s.label);
-    item["kind"] = json::Value::number(15); // Snippet
-    item["insertText"] = json::Value::string(s.text);
-    item["insertTextFormat"] = json::Value::number(2); // Snippet format
-    items.push_back(json::Value(item));
-  }
-
-  // Add variable scoping completions if we can parse the document
   if (!has_error) {
     Parser parser(tokens);
     auto result = parser.parse();
     if (result.errors.empty() && result.program) {
-      // Collect declared names
       for (const auto &decl : result.program->declarations) {
         if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
           json::Object item;
           item["label"] = json::Value::string(func->name);
-          item["kind"] = json::Value::number(3); // Function
+          item["kind"] = json::Value::number(3);
           items.push_back(json::Value(item));
         }
       }
