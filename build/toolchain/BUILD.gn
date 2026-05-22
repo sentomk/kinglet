@@ -51,10 +51,17 @@ if (host_os == "win") {
     }
   }
 } else {
+  _cc = "clang"
+  _cxx = "clang++"
+  if (host_os == "mac") {
+    _cc = "/usr/bin/clang"
+    _cxx = "/usr/bin/clang++"
+  }
+
   toolchain("unix") {
     tool("cc") {
       depfile = "{{output}}.d"
-      command = "clang -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      command = "$_cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
       depsformat = "gcc"
       description = "CC {{output}}"
       outputs = [
@@ -64,7 +71,7 @@ if (host_os == "win") {
 
     tool("cxx") {
       depfile = "{{output}}.d"
-      command = "clang++ -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      command = "$_cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
       depsformat = "gcc"
       description = "CXX {{output}}"
       outputs = [
@@ -84,7 +91,7 @@ if (host_os == "win") {
 
     tool("link") {
       rspfile = "{{output}}.rsp"
-      command = "clang++ {{ldflags}} -o {{output}} @$rspfile {{libs}}"
+      command = "$_cxx {{ldflags}} -o {{output}} @$rspfile {{libs}}"
       description = "LINK {{target_output_name}}{{output_extension}}"
       rspfile_content = "{{inputs}}"
       outputs = [

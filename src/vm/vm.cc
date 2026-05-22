@@ -230,12 +230,38 @@ VmResult Vm::run(const Chunk &chunk) {
     }
     case OpCode::NativeOut: {
       const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
+      if (stack_.size() < arg_count) {
+        return runtime_error("Stack underflow for io::out.");
+      }
+
+      // Pop all args (they're in reverse order on stack)
+      std::vector<Value> args(arg_count);
       for (uint32_t i = 0; i < arg_count; ++i) {
-        if (stack_.empty()) {
-          return runtime_error("Stack underflow for io::out.");
+        args[arg_count - 1 - i] = pop();
+      }
+
+      // First arg is format string, rest are values
+      if (!args.empty() && args[0].type == ValueType::String) {
+        const std::string &fmt = args[0].string_storage;
+        std::size_t val_idx = 1;
+        for (std::size_t pos = 0; pos < fmt.size(); ++pos) {
+          if (pos + 1 < fmt.size() && fmt[pos] == '{' && fmt[pos + 1] == '}') {
+            if (val_idx < args.size()) {
+              std::cout << args[val_idx];
+              ++val_idx;
+            } else {
+              std::cout << "{}";
+            }
+            ++pos; // skip closing }
+          } else {
+            std::cout << fmt[pos];
+          }
         }
-        Value value = pop();
-        std::cout << value;
+      } else {
+        // No format string, just print all args
+        for (const Value &arg : args) {
+          std::cout << arg;
+        }
       }
       std::cout << std::flush;
       push(Value::null_value());
