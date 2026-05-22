@@ -10,7 +10,8 @@ Kinglet uses a rounded technical mark built from:
 Files:
 
 - `kinglet-mark.svg` — primary app / project icon
-- `kinglet-wordmark.svg` — horizontal logo lockup
+- `kinglet-wordmark.svg` — horizontal logo lockup for light backgrounds
+- `kinglet-wordmark-light.svg` — horizontal logo lockup for dark backgrounds
 - `kinglet-mark-mono.svg` — single-color variant for docs, print, and small UI
 
 Palette:

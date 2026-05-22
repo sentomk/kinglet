@@ -4,3 +4,4 @@ out/
 .opencode/
 .vscode/
 test.kl
+.DS_Store
