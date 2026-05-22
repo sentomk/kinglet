@@ -4,6 +4,7 @@
 #include "vm/chunk.h"
 
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -57,8 +58,9 @@ private:
   std::vector<std::size_t> scope_stack_;
   std::vector<CompileError> errors_;
   std::vector<LoopInfo> loop_stack_;
-  std::unordered_set<std::string> used_;    // using io;       -> io::out() works
-  std::unordered_set<std::string> opened_;  // using namespace io; -> out() works
+  std::unordered_set<std::string> used_;
+  std::unordered_set<std::string> opened_;
+  std::unordered_map<std::string, int> function_indices_;
 };
 
 } // namespace kinglet

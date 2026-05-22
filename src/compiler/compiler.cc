@@ -16,6 +16,7 @@ CompileResult Compiler::compile(const ast::Program &program) {
   errors_.clear();
   used_.clear();
   opened_.clear();
+  function_indices_.clear();
 
   for (const ast::DeclPtr &declaration : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
@@ -26,25 +27,40 @@ CompileResult Compiler::compile(const ast::Program &program) {
     }
   }
 
-  const ast::FunctionDecl *main_function = nullptr;
+  // Pass 1: register all functions (enables forward references)
+  std::vector<const ast::FunctionDecl *> functions;
+  int main_index = -1;
   for (const ast::DeclPtr &declaration : program.declarations) {
     if (const auto *function = dynamic_cast<const ast::FunctionDecl *>(declaration.get())) {
+      int idx = chunk_.add_function(FunctionInfo{
+          .name = function->name,
+          .entry = 0,
+          .param_count = static_cast<int>(function->params.size()),
+      });
+      uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
+      function_indices_[function->name] = static_cast<int>(const_idx);
+      functions.push_back(function);
       if (function->name == "main") {
-        main_function = function;
-        break;
+        main_index = idx;
       }
     }
   }
 
-  if (main_function == nullptr) {
+  if (main_index < 0) {
     error_at(program.location, "Expected a main function.");
-  } else {
-    compile_function(*main_function);
+    return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_)};
   }
 
-  if (errors_.empty()) {
-    emit(OpCode::Null, program.location);
-    emit(OpCode::Return, program.location);
+  // Emit preamble: call main, then return its result
+  ast::SourceLocation preamble_loc{1, 0};
+  emit_constant(Value::function_value(main_index), preamble_loc);
+  emit_operand(OpCode::Call, 0, preamble_loc);
+  emit(OpCode::Return, preamble_loc);
+
+  // Pass 2: compile each function body
+  for (const auto *function : functions) {
+    compile_function(*function);
+    if (!errors_.empty()) break;
   }
 
   return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_)};
@@ -64,11 +80,28 @@ void Compiler::pop_scope() {
 }
 
 void Compiler::compile_function(const ast::FunctionDecl &function) {
-  if (!function.params.empty()) {
-    error_at(function.location, "main parameters are not supported yet.");
-    return;
+  locals_.clear();
+  scope_stack_.clear();
+
+  // Look up this function's index and patch its entry point
+  auto it = function_indices_.find(function.name);
+  int const_idx = it->second;
+  int func_idx = chunk_.constants()[static_cast<std::size_t>(const_idx)].function_index_storage;
+  const_cast<FunctionInfo &>(chunk_.functions()[static_cast<std::size_t>(func_idx)]).entry =
+      chunk_.instructions().size();
+
+  // Parameters become locals at slots 0..N-1
+  for (const auto &param : function.params) {
+    locals_.push_back(Local{.name = param.name, .is_mutable = true});
   }
+
   compile_stmt(*function.body);
+
+  // Fallthrough safety: implicit null return
+  if (errors_.empty()) {
+    emit(OpCode::Null, function.location);
+    emit(OpCode::Return, function.location);
+  }
 }
 
 void Compiler::compile_stmt(const ast::Stmt &stmt) {
@@ -398,6 +431,21 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         }
         emit_operand(OpCode::NativeIn, static_cast<uint32_t>(call_expr->args.size()),
                      call_expr->location);
+        return;
+      }
+    }
+
+    // User-defined function call
+    if (callee_id) {
+      auto func_it = function_indices_.find(callee_id->name);
+      if (func_it != function_indices_.end()) {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_constant(Value::function_value(
+            chunk_.constants()[static_cast<std::size_t>(func_it->second)].function_index_storage),
+            call_expr->location);
+        emit_operand(OpCode::Call, static_cast<uint32_t>(call_expr->args.size()), call_expr->location);
         return;
       }
     }
