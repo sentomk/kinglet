@@ -257,7 +257,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration"},
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition"},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
-    {"using namespace", "using namespace ${1:io};", "namespace import"},
+    {"using", "using ${0:io};", "using declaration"},
     {"return", "return ${0:expr};", "return statement"},
   };
   for (const auto &s : snippets) {
@@ -265,12 +265,21 @@ json::Value Server::handle_completion(const json::Value &params) {
     items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
   }
 
-  // Plain keywords
-  for (const char *kw : {"if", "else", "for", "while", "break", "continue", "return",
-                          "inspect", "using", "namespace", "const", "export",
-                          "struct", "enum", "trait", "spawn", "select",
-                          "int", "float", "double", "bool", "string", "void", "byte", "auto",
-                          "true", "false", "null"}) {
+  // Plain keywords — insert with trailing space for those expecting arguments
+  const char *kw_with_space[] = {"if", "else", "for", "while", "return",
+                                  "inspect", "const", "export",
+                                  "struct", "enum", "trait", "spawn", "select",
+                                  "int", "float", "double", "bool", "string", "void", "byte", "auto"};
+  const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
+  for (const char *kw : kw_with_space) {
+    if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
+    json::Object item;
+    item["label"] = json::Value::string(kw);
+    item["kind"] = json::Value::number(14);
+    item["insertText"] = json::Value::string(std::string(kw) + " ");
+    items.push_back(json::Value(item));
+  }
+  for (const char *kw : kw_standalone) {
     if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
     items.push_back(protocol::completion_item(kw, 14));
   }
