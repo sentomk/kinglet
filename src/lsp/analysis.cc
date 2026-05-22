@@ -126,6 +126,18 @@ AnalysisResult analyze(const std::string &source) {
     result.diagnostics.emplace_back(err.line, err.column, err.message);
   }
 
+  // Collect using declarations even with parse errors (for completion)
+  if (parse_result.program) {
+    for (const auto &decl : parse_result.program->declarations) {
+      if (const auto *u = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
+        result.used_namespaces.insert(u->namespace_name);
+        if (u->is_namespace) {
+          result.opened_namespaces.insert(u->namespace_name);
+        }
+      }
+    }
+  }
+
   if (!parse_result.errors.empty() || !parse_result.program) {
     return result;
   }
@@ -139,15 +151,6 @@ AnalysisResult analyze(const std::string &source) {
   SymbolCollector collector;
   collector.collect(*parse_result.program);
   result.symbols = collector.take();
-
-  for (const auto &decl : parse_result.program->declarations) {
-    if (const auto *u = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
-      result.used_namespaces.insert(u->namespace_name);
-      if (u->is_namespace) {
-        result.opened_namespaces.insert(u->namespace_name);
-      }
-    }
-  }
 
   result.program = std::move(parse_result.program);
   result.valid = true;
