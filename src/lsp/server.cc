@@ -199,7 +199,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
-  if (ns_name == "io") {
+  if (ns_name == "io" && (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
     items.push_back(protocol::completion_item_with_edit("out", 3, "stdout output, no newline", line, character, character));
     items.push_back(protocol::completion_item_with_edit("err", 3, "stderr output", line, character, character));
     items.push_back(protocol::completion_item_with_edit("in", 3, "stdin input", line, character, character));
@@ -313,19 +313,21 @@ json::Value Server::handle_completion(const json::Value &params) {
     items.push_back(protocol::completion_item(kw, 14));
   }
 
-  // Namespace completions — insert with trailing '::' and re-trigger
-  for (const char *ns : {"io"}) {
-    if (!prefix.empty() && std::string(ns).find(prefix) == std::string::npos) continue;
-    json::Object item;
-    item["label"] = json::Value::string(ns);
-    item["kind"] = json::Value::number(9);
-    item["detail"] = json::Value::string("namespace");
-    item["insertText"] = json::Value::string(std::string(ns) + "::");
-    json::Object cmd;
-    cmd["title"] = json::Value::string("");
-    cmd["command"] = json::Value::string("editor.action.triggerSuggest");
-    item["command"] = json::Value(cmd);
-    items.push_back(json::Value(item));
+  // Namespace completions — only when 'using io;' is present
+  if (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io")) {
+    for (const char *ns : {"io"}) {
+      if (!prefix.empty() && std::string(ns).find(prefix) == std::string::npos) continue;
+      json::Object item;
+      item["label"] = json::Value::string(ns);
+      item["kind"] = json::Value::number(9);
+      item["detail"] = json::Value::string("namespace");
+      item["insertText"] = json::Value::string(std::string(ns) + "::");
+      json::Object cmd;
+      cmd["title"] = json::Value::string("");
+      cmd["command"] = json::Value::string("editor.action.triggerSuggest");
+      item["command"] = json::Value(cmd);
+      items.push_back(json::Value(item));
+    }
   }
 
   std::cerr << "[LSP] completion: " << items.size() << " items, prefix='" << prefix << "'" << std::endl;
