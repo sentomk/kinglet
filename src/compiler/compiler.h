@@ -15,9 +15,15 @@ struct CompileError {
   std::string message;
 };
 
+struct CompileWarning {
+  ast::SourceLocation location;
+  std::string message;
+};
+
 struct CompileResult {
   Chunk chunk;
   std::vector<CompileError> errors;
+  std::vector<CompileWarning> warnings;
 };
 
 class Compiler {
@@ -57,6 +63,7 @@ private:
   std::vector<Local> locals_;
   std::vector<std::size_t> scope_stack_;
   std::vector<CompileError> errors_;
+  std::vector<CompileWarning> warnings_;
   std::vector<LoopInfo> loop_stack_;
   std::unordered_set<std::string> used_;
   std::unordered_set<std::string> opened_;

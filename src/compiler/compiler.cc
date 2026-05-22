@@ -14,6 +14,7 @@ CompileResult Compiler::compile(const ast::Program &program) {
   chunk_ = Chunk();
   locals_.clear();
   errors_.clear();
+  warnings_.clear();
   used_.clear();
   opened_.clear();
   function_indices_.clear();
@@ -48,7 +49,7 @@ CompileResult Compiler::compile(const ast::Program &program) {
 
   if (main_index < 0) {
     error_at(program.location, "Expected a main function.");
-    return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_)};
+    return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_), .warnings = std::move(warnings_)};
   }
 
   // Emit preamble: call main, then return its result
@@ -63,7 +64,7 @@ CompileResult Compiler::compile(const ast::Program &program) {
     if (!errors_.empty()) break;
   }
 
-  return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_)};
+  return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_), .warnings = std::move(warnings_)};
 }
 
 void Compiler::push_scope() {
@@ -107,10 +108,21 @@ void Compiler::compile_function(const ast::FunctionDecl &function) {
 void Compiler::compile_stmt(const ast::Stmt &stmt) {
   if (const auto *block = dynamic_cast<const ast::BlockStmt *>(&stmt)) {
     push_scope();
+    bool returned = false;
     for (const ast::StmtPtr &statement : block->statements) {
+      if (returned) {
+        warnings_.push_back(CompileWarning{
+            .location = statement->location,
+            .message = "Unreachable code after return statement.",
+        });
+        break;
+      }
       compile_stmt(*statement);
       if (!errors_.empty()) {
         return;
+      }
+      if (dynamic_cast<const ast::ReturnStmt *>(statement.get())) {
+        returned = true;
       }
     }
     pop_scope();

@@ -228,6 +228,10 @@ int main(int argc, char **argv) {
       if (!compile_result.errors.empty()) {
         continue;
       }
+      for (const kinglet::CompileWarning &warning : compile_result.warnings) {
+        std::cerr << warning.location.line << ':' << warning.location.column
+                  << ": warning: " << warning.message << '\n';
+      }
 
       kinglet::VmResult vm_result = vm.run(compile_result.chunk);
       if (!vm_result.ok) {
@@ -303,6 +307,11 @@ int main(int argc, char **argv) {
 
   if (!compile_result.errors.empty()) {
     return 65;
+  }
+
+  for (const kinglet::CompileWarning &warning : compile_result.warnings) {
+    std::cerr << warning.location.line << ':' << warning.location.column
+              << ": warning: " << warning.message << '\n';
   }
 
   if (mode == Mode::Bytecode) {
