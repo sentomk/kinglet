@@ -252,8 +252,6 @@ json::Value Server::handle_completion(const json::Value &params) {
     std::size_t s = e;
     while (s > 0 && std::isalnum(static_cast<unsigned char>(before[s - 1]))) --s;
     ns_name = before.substr(s, e - s);
-    std::cerr << "[kinglet-lsp] ns completion: before='" << before
-              << "' ns='" << ns_name << "' line=" << line << " ch=" << character << std::endl;
   }
 
   if (!ns_name.empty()) {
