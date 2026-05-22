@@ -1,2 +1,4 @@
 out/
 .gn
+# VSCode workspace settings (personal)
+.vscode/settings.json

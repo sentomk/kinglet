@@ -1,0 +1,31 @@
+{
+  "name": "kinglet",
+  "displayName": "Kinglet",
+  "description": "Kinglet language support — syntax highlighting, bracket matching, and auto-closing pairs",
+  "version": "0.1.0",
+  "publisher": "kinglet",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "kinglet",
+        "aliases": ["Kinglet", "kinglet"],
+        "extensions": [".kl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kinglet",
+        "scopeName": "source.kinglet",
+        "path": "./kinglet.tmLanguage.json"
+      }
+    ]
+  }
+}
