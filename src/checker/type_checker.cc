@@ -38,11 +38,13 @@ std::string type_to_string(const Type &type) {
 TypeCheckResult TypeChecker::check(const ast::Program &program) {
   errors_.clear();
   scopes_.clear();
+  using_.clear();
 
   push_scope();
 
   for (const ast::DeclPtr &decl : program.declarations) {
-    if (dynamic_cast<const ast::UsingDecl *>(decl.get())) {
+    if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
+      using_.insert(using_decl->namespace_name);
       continue;
     }
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
@@ -313,9 +315,38 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       return void_type();
     }
 
+    // Handle bare io:: members when 'using io;' is in effect
+    if (callee_id && using_.count("io") != 0) {
+      if (callee_id->name == "out") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          check_expr(*arg);
+        }
+        return void_type();
+      }
+      if (callee_id->name == "err") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          check_expr(*arg);
+        }
+        return void_type();
+      }
+      if (callee_id->name == "in") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          check_expr(*arg);
+        }
+        return string_type();
+      }
+    }
+
     const auto *ns_callee =
         dynamic_cast<const ast::NamespaceAccessExpr *>(call_expr->callee.get());
     if (ns_callee && ns_callee->namespace_name == "io" && ns_callee->member_name == "out") {
+      for (const ast::ExprPtr &arg : call_expr->args) {
+        check_expr(*arg);
+      }
+      return void_type();
+    }
+
+    if (ns_callee && ns_callee->namespace_name == "io" && ns_callee->member_name == "err") {
       for (const ast::ExprPtr &arg : call_expr->args) {
         check_expr(*arg);
       }

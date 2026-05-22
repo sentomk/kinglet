@@ -34,6 +34,7 @@ enum class OpCode : uint8_t {
   Ge,
   NativePrint,
   NativeOut,
+  NativeErr,
   NativeIn,
 };
 

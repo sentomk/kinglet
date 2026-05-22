@@ -1,5 +1,3 @@
-using io;
-
 int main() {
 
     io::out("for with no init:\n");

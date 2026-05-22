@@ -14,6 +14,13 @@ CompileResult Compiler::compile(const ast::Program &program) {
   chunk_ = Chunk();
   locals_.clear();
   errors_.clear();
+  using_.clear();
+
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
+      using_.insert(using_decl->namespace_name);
+    }
+  }
 
   const ast::FunctionDecl *main_function = nullptr;
   for (const ast::DeclPtr &declaration : program.declarations) {
@@ -340,6 +347,34 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       return;
     }
 
+    // Handle bare io:: members when 'using io;' is in effect
+    if (callee_id && using_.count("io") != 0) {
+      if (callee_id->name == "out") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeOut, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+      if (callee_id->name == "err") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeErr, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+      if (callee_id->name == "in") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeIn, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+    }
+
     const auto *ns_callee =
         dynamic_cast<const ast::NamespaceAccessExpr *>(call_expr->callee.get());
     if (ns_callee && ns_callee->namespace_name == "io" && ns_callee->member_name == "out") {
@@ -347,6 +382,15 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         compile_expr(*arg);
       }
       emit_operand(OpCode::NativeOut, static_cast<uint32_t>(call_expr->args.size()),
+                   call_expr->location);
+      return;
+    }
+
+    if (ns_callee && ns_callee->namespace_name == "io" && ns_callee->member_name == "err") {
+      for (const ast::ExprPtr &arg : call_expr->args) {
+        compile_expr(*arg);
+      }
+      emit_operand(OpCode::NativeErr, static_cast<uint32_t>(call_expr->args.size()),
                    call_expr->location);
       return;
     }

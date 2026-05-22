@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace kinglet {
@@ -42,6 +43,7 @@ private:
 
   std::vector<std::unordered_map<std::string, VarInfo>> scopes_;
   std::vector<TypeError> errors_;
+  std::unordered_set<std::string> using_;
   int loop_depth_ = 0;
 };
 

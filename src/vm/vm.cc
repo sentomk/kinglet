@@ -267,6 +267,40 @@ VmResult Vm::run(const Chunk &chunk) {
       push(Value::null_value());
       break;
     }
+    case OpCode::NativeErr: {
+      const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
+      if (stack_.size() < arg_count) {
+        return runtime_error("Stack underflow for io::err.");
+      }
+      std::vector<Value> args(arg_count);
+      for (uint32_t i = 0; i < arg_count; ++i) {
+        args[arg_count - 1 - i] = pop();
+      }
+      if (!args.empty() && args[0].type == ValueType::String) {
+        const std::string &fmt = args[0].string_storage;
+        std::size_t val_idx = 1;
+        for (std::size_t pos = 0; pos < fmt.size(); ++pos) {
+          if (pos + 1 < fmt.size() && fmt[pos] == '{' && fmt[pos + 1] == '}') {
+            if (val_idx < args.size()) {
+              std::cerr << args[val_idx];
+              ++val_idx;
+            } else {
+              std::cerr << "{}";
+            }
+            ++pos;
+          } else {
+            std::cerr << fmt[pos];
+          }
+        }
+      } else {
+        for (const Value &arg : args) {
+          std::cerr << arg;
+        }
+      }
+      std::cerr << std::flush;
+      push(Value::null_value());
+      break;
+    }
     case OpCode::NativeIn: {
       const uint32_t argc = static_cast<uint32_t>(instruction.operand);
       // Consume optional prompt argument from stack
