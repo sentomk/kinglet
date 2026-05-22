@@ -21,7 +21,7 @@ int main() {
         io::out("{}\n", i);
     }
 
-    mut result = inspect (2) {
+    auto result = inspect (2) {
         1 => "one",
         2 => "two",
         _ => "other"
