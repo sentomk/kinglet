@@ -1,13 +1,17 @@
 {
   "name": "kinglet",
   "displayName": "Kinglet",
-  "description": "Kinglet language support — syntax highlighting, bracket matching, and auto-closing pairs",
+  "description": "Kinglet language support — syntax highlighting, diagnostics, LSP",
   "version": "0.1.0",
   "publisher": "kinglet",
   "license": "MIT",
+  "main": "./extension.js",
   "engines": {
     "vscode": "^1.60.0"
   },
+  "activationEvents": [
+    "onLanguage:kinglet"
+  ],
   "categories": [
     "Programming Languages"
   ],
@@ -15,8 +19,13 @@
     "languages": [
       {
         "id": "kinglet",
-        "aliases": ["Kinglet", "kinglet"],
-        "extensions": [".kl"],
+        "aliases": [
+          "Kinglet",
+          "kinglet"
+        ],
+        "extensions": [
+          ".kl"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -34,5 +43,14 @@
         "path": "./kinglet-icon-theme.json"
       }
     ]
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "type": "commonjs",
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

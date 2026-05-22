@@ -1,0 +1,18 @@
+static_library("lsp") {
+  sources = [
+    "json.cc",
+    "json.h",
+    "lsp_server.cc",
+    "lsp_server.h",
+  ]
+
+  deps = [
+    "//src/checker",
+    "//src/lexer",
+    "//src/parser",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

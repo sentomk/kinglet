@@ -1,6 +1,7 @@
 group("default") {
   deps = [
     ":kinglet",
+    ":kinglet-lsp",
   ]
 }
 
@@ -15,6 +16,23 @@ executable("kinglet") {
     "//src/lexer",
     "//src/parser",
     "//src/vm",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}
+
+executable("kinglet-lsp") {
+  sources = [
+    "src/lsp_server/main.cc",
+  ]
+
+  deps = [
+    "//src/checker",
+    "//src/lexer",
+    "//src/lsp",
+    "//src/parser",
   ]
 
   include_dirs = [

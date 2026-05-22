@@ -1,0 +1,13 @@
+executable("lsp_server") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    "//src/lsp",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}
