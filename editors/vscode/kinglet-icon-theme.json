@@ -1,0 +1,18 @@
+{
+  "iconDefinitions": {
+    "kinglet": {
+      "iconPath": "./icons/kinglet-file-light.svg"
+    },
+    "kinglet-light": {
+      "iconPath": "./icons/kinglet-file.svg"
+    }
+  },
+  "fileExtensions": {
+    "kl": "kinglet"
+  },
+  "light": {
+    "fileExtensions": {
+      "kl": "kinglet-light"
+    }
+  }
+}

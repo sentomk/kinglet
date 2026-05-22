@@ -45,7 +45,14 @@
           "description": "Path to the kinglet-lsp executable"
         }
       }
-    }
+    },
+    "iconThemes": [
+      {
+        "id": "kinglet-icons",
+        "label": "Kinglet File Icons",
+        "path": "./kinglet-icon-theme.json"
+      }
+    ]
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
