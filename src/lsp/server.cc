@@ -239,10 +239,10 @@ json::Value Server::handle_completion(const json::Value &params) {
     items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
   }
 
-  // Plain keywords (no snippet expansion needed)
-  for (const char *kw : {"else", "break", "continue",
-                          "using", "namespace", "const", "import", "export",
-                          "trait", "spawn", "select",
+  // Plain keywords
+  for (const char *kw : {"if", "else", "for", "while", "break", "continue", "return",
+                          "inspect", "using", "namespace", "const", "import", "export",
+                          "struct", "enum", "trait", "spawn", "select",
                           "int", "float", "double", "bool", "string", "void", "byte", "auto",
                           "true", "false", "null"}) {
     if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
