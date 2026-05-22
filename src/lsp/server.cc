@@ -197,9 +197,9 @@ json::Value Server::handle_completion(const json::Value &params) {
   }
 
   if (ns_name == "io") {
-    items.push_back(protocol::completion_item("out", 3, "stdout output, no newline"));
-    items.push_back(protocol::completion_item("err", 3, "stderr output"));
-    items.push_back(protocol::completion_item("in", 3, "stdin input"));
+    items.push_back(protocol::completion_item_with_edit("out", 3, "stdout output, no newline", line, character, character));
+    items.push_back(protocol::completion_item_with_edit("err", 3, "stderr output", line, character, character));
+    items.push_back(protocol::completion_item_with_edit("in", 3, "stdin input", line, character, character));
     return json::Value(items);
   }
 
