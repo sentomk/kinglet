@@ -257,6 +257,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration"},
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition"},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition"},
+    {"using io", "using io;", "using io"},
     {"using", "using ${0:io};", "using declaration"},
     {"return", "return ${0:expr};", "return statement"},
   };
