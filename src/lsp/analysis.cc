@@ -83,9 +83,12 @@ private:
 
 std::vector<const Symbol *> SymbolTable::visible_at(int line) const {
   std::vector<const Symbol *> result;
-  for (const auto &sym : symbols) {
-    if (sym.scope_start_line <= line && line <= sym.scope_end_line) {
-      result.push_back(&sym);
+  std::set<std::string> seen;
+  for (auto it = symbols.rbegin(); it != symbols.rend(); ++it) {
+    if (it->scope_start_line <= line && line <= it->scope_end_line) {
+      if (seen.insert(it->name).second) {
+        result.push_back(&*it);
+      }
     }
   }
   return result;
