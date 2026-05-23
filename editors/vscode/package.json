@@ -2,8 +2,12 @@
   "name": "kinglet",
   "displayName": "Kinglet",
   "description": "Kinglet language support — syntax highlighting, diagnostics, LSP",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "publisher": "kinglet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sentomk/kinglet"
+  },
   "license": "MIT",
   "main": "./extension.js",
   "engines": {
@@ -56,7 +60,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "npx @vscode/vsce package && code --install-extension kinglet-0.1.0.vsix"
+    "deploy": "npx @vscode/vsce package && code --install-extension kinglet-0.0.1.vsix"
   },
   "keywords": [],
   "author": "",
