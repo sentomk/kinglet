@@ -29,7 +29,21 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install GN
-        uses: aspect-build/setup-gn@v1
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-arm64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          else
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
