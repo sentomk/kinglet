@@ -5,7 +5,6 @@
 - [ ] Add CLI/golden tests for successful runs, diagnostics, bytecode dumps, and regressions
 - [ ] I/O API design: make `io::in` an input object with methods like `io::in.line(prompt)` and `io::in.secret(prompt)`
 - [ ] I/O API design: decide whether `io::in(prompt)` remains as shorthand for `io::in.line(prompt)`
-- [ ] Implement or remove currently accepted-but-unsupported operators: `%`, `&&`, `||`, `~`
 - [ ] LSP diagnostics: surface compiler warnings (unreachable code, etc.)
 - [ ] Error message improvements (suggest `using io;` when `io::` used without it)
 - [ ] `using io::out;` selective import syntax
@@ -37,6 +36,7 @@
 
 ## Done
 
+- [x] Operators: `%` (modulo), `&&`/`||` (short-circuit), `~` (bitwise NOT)
 - [x] Generics `<T>` (monomorphization: structs + functions)
 - [x] TypeChecker: report unknown type names (no longer silently treated as `int`)
 - [x] TypeChecker: validate struct literal field count and value types

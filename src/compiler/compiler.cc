@@ -356,6 +356,9 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     case ast::UnaryOp::Not:
       emit(OpCode::Not, unary->location);
       break;
+    case ast::UnaryOp::BitNot:
+      emit(OpCode::BitNot, unary->location);
+      break;
     default:
       error_at(unary->location, "Unsupported unary operator.");
       break;
@@ -379,6 +382,26 @@ void Compiler::compile_expr(const ast::Expr &expr) {
   }
 
   if (const auto *binary = dynamic_cast<const ast::BinaryExpr *>(&expr)) {
+    if (binary->op == ast::BinaryOp::And) {
+      compile_expr(*binary->left);
+      std::size_t false_jump = emit_jump(OpCode::JmpFalse, binary->location);
+      compile_expr(*binary->right);
+      std::size_t end_jump = emit_jump(OpCode::Jmp, binary->location);
+      patch_jump(false_jump);
+      emit(OpCode::False, binary->location);
+      patch_jump(end_jump);
+      return;
+    }
+    if (binary->op == ast::BinaryOp::Or) {
+      compile_expr(*binary->left);
+      std::size_t false_jump = emit_jump(OpCode::JmpFalse, binary->location);
+      emit(OpCode::True, binary->location);
+      std::size_t end_jump = emit_jump(OpCode::Jmp, binary->location);
+      patch_jump(false_jump);
+      compile_expr(*binary->right);
+      patch_jump(end_jump);
+      return;
+    }
     compile_expr(*binary->left);
     compile_expr(*binary->right);
     switch (binary->op) {
@@ -393,6 +416,9 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       break;
     case ast::BinaryOp::Div:
       emit(OpCode::Divide, binary->location);
+      break;
+    case ast::BinaryOp::Mod:
+      emit(OpCode::Modulo, binary->location);
       break;
     case ast::BinaryOp::Eq:
       emit(OpCode::Eq, binary->location);

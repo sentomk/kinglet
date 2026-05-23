@@ -389,6 +389,11 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       return right_type;
     case ast::UnaryOp::Not:
       return bool_type();
+    case ast::UnaryOp::BitNot:
+      if (right_type.kind != TypeKind::Int) {
+        error_at(unary->location, "Bitwise NOT requires an integer operand.");
+      }
+      return int_type();
     default:
       error_at(unary->location, "Unsupported unary operator.");
       return int_type();

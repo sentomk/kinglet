@@ -44,11 +44,20 @@ VmResult Vm::run(const Chunk &chunk) {
     case OpCode::Add:
     case OpCode::Subtract:
     case OpCode::Multiply:
-    case OpCode::Divide: {
+    case OpCode::Divide:
+    case OpCode::Modulo: {
       std::string error;
       if (!binary_numeric(instruction.op, &error)) {
         return runtime_error(std::move(error));
       }
+      break;
+    }
+    case OpCode::BitNot: {
+      if (stack_.empty() || stack_.back().type != ValueType::Int) {
+        return runtime_error("Operand must be an integer.");
+      }
+      Value value = pop();
+      push(Value::int_value(~value.int_value_storage));
       break;
     }
     case OpCode::Negate: {
@@ -477,6 +486,13 @@ bool Vm::binary_numeric(OpCode op, std::string *error) {
       }
       push(Value::int_value(left.int_value_storage / right.int_value_storage));
       return true;
+    case OpCode::Modulo:
+      if (right.int_value_storage == 0) {
+        *error = "Modulo by zero.";
+        return false;
+      }
+      push(Value::int_value(left.int_value_storage % right.int_value_storage));
+      return true;
     default:
       break;
     }
@@ -496,6 +512,9 @@ bool Vm::binary_numeric(OpCode op, std::string *error) {
     return true;
   case OpCode::Divide:
     push(Value::double_value(lhs / rhs));
+    return true;
+  case OpCode::Modulo:
+    push(Value::double_value(std::fmod(lhs, rhs)));
     return true;
   default:
     *error = "Invalid numeric opcode.";
