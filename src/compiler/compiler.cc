@@ -566,17 +566,10 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     }
     int type_idx = struct_it->second;
     const auto &meta = chunk_.struct_metas()[static_cast<std::size_t>(type_idx)];
-    // Emit fields in declaration order
-    for (const auto &field_name : meta.field_names) {
-      bool found = false;
-      for (const auto &init : struct_lit->fields) {
-        if (init.name == field_name) {
-          compile_expr(*init.value);
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
+    for (std::size_t i = 0; i < meta.field_names.size(); ++i) {
+      if (i < struct_lit->fields.size()) {
+        compile_expr(*struct_lit->fields[i].value);
+      } else {
         emit(OpCode::Null, struct_lit->location);
       }
     }

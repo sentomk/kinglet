@@ -321,6 +321,20 @@ ast::StmtPtr Parser::var_declaration() {
   ast::ExprPtr init;
   if (match(TokenType::EQUAL)) {
     init = expression();
+  } else if (!type.empty() && check(TokenType::LEFT_BRACE)) {
+    // Direct initialization: Point p { 2, 3 };
+    advance(); // consume '{'
+    std::vector<ast::StructLiteralExpr::FieldInit> fields;
+    while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+      ast::ExprPtr value = expression();
+      fields.push_back(ast::StructLiteralExpr::FieldInit{"", std::move(value)});
+      if (!check(TokenType::RIGHT_BRACE)) {
+        consume(TokenType::COMMA, "Expected ',' between struct fields.");
+      }
+    }
+    consume(TokenType::RIGHT_BRACE, "Expected '}' after struct literal.");
+    init = std::make_unique<ast::StructLiteralExpr>(
+        location_of(start_token), type, std::move(fields));
   }
   consume(TokenType::SEMICOLON, "Expected ';' after variable declaration.");
   return std::make_unique<ast::VarDeclStmt>(location_of(start_token), std::move(storage), std::move(type),
@@ -508,16 +522,12 @@ ast::ExprPtr Parser::primary() {
           location_of(identifier), token_text(identifier), token_text(member));
     }
     if (check(TokenType::LEFT_BRACE) && current_ + 1 < tokens_.size() &&
-        tokens_[current_ + 1].type == TokenType::IDENTIFIER &&
-        current_ + 2 < tokens_.size() &&
-        tokens_[current_ + 2].type == TokenType::COLON) {
+        tokens_[current_ + 1].type != TokenType::RIGHT_BRACE) {
       advance(); // consume '{'
       std::vector<ast::StructLiteralExpr::FieldInit> fields;
       while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
-        const Token &field_name = consume(TokenType::IDENTIFIER, "Expected field name.");
-        consume(TokenType::COLON, "Expected ':' after field name.");
         ast::ExprPtr value = expression();
-        fields.push_back(ast::StructLiteralExpr::FieldInit{token_text(field_name), std::move(value)});
+        fields.push_back(ast::StructLiteralExpr::FieldInit{"", std::move(value)});
         if (!check(TokenType::RIGHT_BRACE)) {
           consume(TokenType::COMMA, "Expected ',' between struct fields.");
         }
