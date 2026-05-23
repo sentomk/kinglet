@@ -39,12 +39,18 @@ Type TypeChecker::resolve_type_name(const std::string &name) const {
   if (it != type_registry_.end()) {
     return it->second;
   }
-  return int_type();
+  Type err(TypeKind::Void);
+  err.name = "<unknown:" + name + ">";
+  return err;
 }
 
-Type TypeChecker::resolve_type_expr(const ast::TypeExpr &expr) {
+Type TypeChecker::resolve_type_expr(const ast::TypeExpr &expr, ast::SourceLocation loc) {
   if (expr.type_args.empty()) {
-    return resolve_type_name(expr.name);
+    Type t = resolve_type_name(expr.name);
+    if (t.name.find("<unknown:") == 0 && loc.line > 0) {
+      error_at(loc, "Unknown type '" + expr.name + "'.");
+    }
+    return t;
   }
   std::string mangled = mangle_name(expr.name, expr.type_args);
   auto it = type_registry_.find(mangled);
@@ -59,7 +65,12 @@ Type TypeChecker::resolve_type_expr(const ast::TypeExpr &expr) {
       return inst_it->second;
     }
   }
-  return int_type();
+  if (loc.line > 0) {
+    error_at(loc, "Unknown type '" + expr.to_string() + "'.");
+  }
+  Type err(TypeKind::Void);
+  err.name = "<unknown:" + expr.to_string() + ">";
+  return err;
 }
 
 std::string TypeChecker::mangle_name(const std::string &base, const std::vector<ast::TypeExpr> &args) const {
@@ -168,7 +179,9 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       continue;
     }
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
-      check_function(*func);
+      if (func->type_params.empty()) {
+        check_function(*func);
+      }
     }
   }
 
@@ -178,12 +191,12 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
 }
 
 void TypeChecker::check_function(const ast::FunctionDecl &function) {
-  Type return_type = resolve_type_expr(function.return_type);
+  Type return_type = resolve_type_expr(function.return_type, function.location);
 
   push_scope();
 
   for (const auto &param : function.params) {
-    Type param_type = resolve_type_expr(param.type);
+    Type param_type = resolve_type_expr(param.type, function.location);
     declare_var(param.name, param_type, true);
   }
 
@@ -219,7 +232,7 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
   }
 
   if (const auto *var_decl = dynamic_cast<const ast::VarDeclStmt *>(&stmt)) {
-    Type var_type = resolve_type_expr(var_decl->type);
+    Type var_type = resolve_type_expr(var_decl->type, var_decl->location);
     if (var_decl->init) {
       Type init_type = check_expr(*var_decl->init);
       if (var_decl->type.name == "auto") {
@@ -549,7 +562,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
   }
 
   if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(&expr)) {
-    Type resolved = resolve_type_expr(struct_lit->struct_type);
+    Type resolved = resolve_type_expr(struct_lit->struct_type, struct_lit->location);
     std::string type_name = struct_lit->struct_type.to_string();
     auto type_opt = lookup_type(resolved.name);
     if (!type_opt.has_value()) {
@@ -560,8 +573,27 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       error_at(struct_lit->location, "'" + type_name + "' is not a struct type.");
       return int_type();
     }
-    for (const auto &field_init : struct_lit->fields) {
-      check_expr(*field_init.value);
+    const auto &fields_def = type_opt->fields;
+    if (struct_lit->fields.size() != fields_def.size()) {
+      error_at(struct_lit->location,
+               "Struct '" + type_name + "' expects " + std::to_string(fields_def.size()) +
+                   " field(s), got " + std::to_string(struct_lit->fields.size()) + ".");
+    }
+    for (size_t i = 0; i < struct_lit->fields.size() && i < fields_def.size(); ++i) {
+      Type val_type = check_expr(*struct_lit->fields[i].value);
+      Type expected(fields_def[i].type_kind);
+      if (fields_def[i].type_kind == TypeKind::Struct && !fields_def[i].type_name.empty()) {
+        auto reg_it = type_registry_.find(fields_def[i].type_name);
+        if (reg_it != type_registry_.end()) expected = reg_it->second;
+      }
+      if (!val_type.is_compatible_with(expected)) {
+        error_at(struct_lit->fields[i].value->location,
+                 "Field '" + fields_def[i].name + "' expects " + type_to_string(expected) +
+                     ", got " + type_to_string(val_type) + ".");
+      }
+    }
+    for (size_t i = fields_def.size(); i < struct_lit->fields.size(); ++i) {
+      check_expr(*struct_lit->fields[i].value);
     }
     return *type_opt;
   }
@@ -595,7 +627,17 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     }
     for (const auto &f : obj_type.fields) {
       if (f.name == field_assign->field_name) {
-        return Type(f.type_kind);
+        Type field_type(f.type_kind);
+        if (f.type_kind == TypeKind::Struct && !f.type_name.empty()) {
+          auto reg_it = type_registry_.find(f.type_name);
+          if (reg_it != type_registry_.end()) field_type = reg_it->second;
+        }
+        if (!value_type.is_compatible_with(field_type)) {
+          error_at(field_assign->location,
+                   "Cannot assign " + type_to_string(value_type) + " to field '" +
+                       f.name + "' of type " + type_to_string(field_type) + ".");
+        }
+        return field_type;
       }
     }
     error_at(field_assign->location, "Struct '" + obj_type.name + "' has no field '" +

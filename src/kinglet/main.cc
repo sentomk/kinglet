@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
           }
         }
         if (!found) {
-          wrapped_source = "import io; int main() => " + expr + ";";
+          wrapped_source = "using io; int main() => " + expr + ";";
         }
       } else {
         wrapped_source = line;

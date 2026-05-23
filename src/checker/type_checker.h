@@ -39,7 +39,7 @@ private:
   std::optional<Type> lookup_var(const std::string &name);
   std::optional<Type> lookup_type(const std::string &name) const;
   Type resolve_type_name(const std::string &name) const;
-  Type resolve_type_expr(const ast::TypeExpr &expr);
+  Type resolve_type_expr(const ast::TypeExpr &expr, ast::SourceLocation loc = {});
   std::string mangle_name(const std::string &base, const std::vector<ast::TypeExpr> &args) const;
   void instantiate_generic_struct(const ast::StructDecl *decl, const std::vector<ast::TypeExpr> &args);
   void error_at(ast::SourceLocation location, std::string message);
