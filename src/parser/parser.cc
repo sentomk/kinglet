@@ -602,7 +602,8 @@ ast::ExprPtr Parser::primary() {
           location_of(identifier), token_text(identifier), token_text(member));
     }
     if (check(TokenType::LEFT_BRACE) && current_ + 1 < tokens_.size() &&
-        tokens_[current_ + 1].type != TokenType::RIGHT_BRACE) {
+        tokens_[current_ + 1].type != TokenType::RIGHT_BRACE &&
+        !token_text(identifier).empty() && std::isupper(token_text(identifier)[0])) {
       advance(); // consume '{'
       std::vector<ast::StructLiteralExpr::FieldInit> fields;
       while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
