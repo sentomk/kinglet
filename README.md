@@ -1,42 +1,67 @@
-# Kinglet
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/brand-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/brand.svg">
+    <img src="assets/brand/brand.svg" width="420" alt="Kinglet">
+  </picture>
+</p>
 
-A C++-flavored systems programming language with first-class pattern matching, compiled to bytecode VM.
+<p align="center">A C++-flavored systems programming language with first-class pattern matching, compiled to bytecode VM.</p>
 
 > Familiar to C++ developers from day one. Pattern matching as primary control flow. Runtime small enough to embed.
 
 ## Build
 
 ```bash
-ninja -C out/Debug
-./out/Debug/kinglet [--tokens | --ast | --bytecode | --repl] <file.kl>
+gn gen out/Release --args='is_debug=false'
+ninja -C out/Release
+./out/Release/kinglet [--tokens | --ast | --bytecode | --repl] <file.kl>
 ```
 
 ## Quick Example
 
-```rust
+```kinglet
 using io;
 
+struct Point {
+  int x;
+  int y;
+}
+
+enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+}
+
 int main() {
-    for (int i = 0; i < 5; i += 1) {
-        io::out("{}\n", i);
-    }
+  Point p { 10, 20 };
+  io::out(p.x);
+  io::out(p.y);
 
-    auto result = inspect (2) {
-        1 => "one",
-        2 => "two",
-        _ => "other"
-    };
-    io::out("{}\n", result);
+  Direction d = Direction::Up;
+  inspect (d) {
+    Direction::Up => io::out("going up"),
+    Direction::Down => io::out("going down"),
+    _ => io::out("sideways")
+  };
 
-    return 0;
+  return 0;
 }
 ```
 
 ## Syntax
 
-```rust
+```kinglet
 // Types
 int x = 42;          auto x = 42;         const x = 42;
+
+// Structs & Enums
+struct Vec2 { int x; int y; }
+enum Color { Red, Green, Blue, }
+Vec2 v { 1, 2 };
+Color c = Color::Red;
 
 // Control flow
 if (x > 0) { ... } else { ... }
