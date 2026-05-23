@@ -6,9 +6,10 @@
   </picture>
 </p>
 
-<p align="center">A C++-flavored systems programming language with first-class pattern matching, compiled to bytecode VM.</p>
+<p align="center">A C++-flavored language compiled to a lightweight bytecode VM, selectively implementing the proposals that deserved to ship.</p>
 
-> Familiar to C++ developers from day one. Pattern matching as primary control flow. Runtime small enough to embed.
+> [!NOTE]
+> Familiar semantics. Curated features from WG21 proposals that were deferred or rejected. A VM small enough to embed anywhere.
 
 ## Build
 
