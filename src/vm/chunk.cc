@@ -56,6 +56,26 @@ const std::vector<FunctionInfo> &Chunk::functions() const {
   return functions_;
 }
 
+int Chunk::add_struct_meta(StructMeta meta) {
+  int index = static_cast<int>(struct_metas_.size());
+  struct_metas_.push_back(std::move(meta));
+  return index;
+}
+
+int Chunk::add_enum_meta(EnumMeta meta) {
+  int index = static_cast<int>(enum_metas_.size());
+  enum_metas_.push_back(std::move(meta));
+  return index;
+}
+
+const std::vector<StructMeta> &Chunk::struct_metas() const {
+  return struct_metas_;
+}
+
+const std::vector<EnumMeta> &Chunk::enum_metas() const {
+  return enum_metas_;
+}
+
 void Chunk::disassemble(std::ostream &out) const {
   for (std::size_t i = 0; i < instructions_.size(); ++i) {
     const Instruction &instruction = instructions_[i];
@@ -137,6 +157,14 @@ const char *opcode_name(OpCode op) {
     return "NativeErr";
   case OpCode::NativeIn:
     return "NativeIn";
+  case OpCode::StructNew:
+    return "StructNew";
+  case OpCode::FieldGet:
+    return "FieldGet";
+  case OpCode::FieldSet:
+    return "FieldSet";
+  case OpCode::EnumVariant:
+    return "EnumVariant";
   }
   return "Unknown";
 }

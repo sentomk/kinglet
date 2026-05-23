@@ -18,6 +18,8 @@ CompileResult Compiler::compile(const ast::Program &program) {
   used_.clear();
   opened_.clear();
   function_indices_.clear();
+  struct_indices_.clear();
+  enum_indices_.clear();
 
   for (const ast::DeclPtr &declaration : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
@@ -28,7 +30,26 @@ CompileResult Compiler::compile(const ast::Program &program) {
     }
   }
 
-  // Pass 1: register all functions (enables forward references)
+  // Pass 1: register all structs, enums, and functions
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *struct_decl = dynamic_cast<const ast::StructDecl *>(declaration.get())) {
+      StructMeta meta;
+      meta.name = struct_decl->name;
+      for (const auto &field : struct_decl->fields) {
+        meta.field_names.push_back(field.name);
+      }
+      int idx = chunk_.add_struct_meta(std::move(meta));
+      struct_indices_[struct_decl->name] = idx;
+    }
+    if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(declaration.get())) {
+      EnumMeta meta;
+      meta.name = enum_decl->name;
+      meta.variants = enum_decl->variants;
+      int idx = chunk_.add_enum_meta(std::move(meta));
+      enum_indices_[enum_decl->name] = idx;
+    }
+  }
+
   std::vector<const ast::FunctionDecl *> functions;
   int main_index = -1;
   for (const ast::DeclPtr &declaration : program.declarations) {
@@ -476,7 +497,7 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     const uint32_t temp_slot = static_cast<uint32_t>(locals_.size());
     locals_.push_back(Local{.name = "<inspect_value>", .is_mutable = false});
     emit_operand(OpCode::StoreLocal, temp_slot, inspect_expr->location);
-    
+
     // Compile each arm as an if-else chain
     std::vector<std::size_t> end_jumps;
     for (const ast::InspectArm &arm : inspect_expr->arms) {
@@ -498,14 +519,84 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         patch_jump(next_arm);
       }
     }
-    
+
     // Patch all end jumps to point here
     for (std::size_t jump : end_jumps) {
       patch_jump(jump);
     }
-    
+
     // Remove the temporary local
     locals_.pop_back();
+    return;
+  }
+
+  if (const auto *ns_access = dynamic_cast<const ast::NamespaceAccessExpr *>(&expr)) {
+    auto enum_it = enum_indices_.find(ns_access->namespace_name);
+    if (enum_it != enum_indices_.end()) {
+      int type_idx = enum_it->second;
+      const auto &meta = chunk_.enum_metas()[static_cast<std::size_t>(type_idx)];
+      int variant_idx = -1;
+      for (int i = 0; i < static_cast<int>(meta.variants.size()); ++i) {
+        if (meta.variants[static_cast<std::size_t>(i)] == ns_access->member_name) {
+          variant_idx = i;
+          break;
+        }
+      }
+      if (variant_idx < 0) {
+        error_at(ns_access->location, "Unknown enum variant '" + ns_access->member_name + "'.");
+        return;
+      }
+      uint32_t operand = (static_cast<uint32_t>(type_idx) << 16) |
+                         static_cast<uint32_t>(variant_idx);
+      emit_operand(OpCode::EnumVariant, operand, ns_access->location);
+      return;
+    }
+    if (used_.count(ns_access->namespace_name) != 0) {
+      return;
+    }
+    error_at(ns_access->location, "Unknown namespace '" + ns_access->namespace_name + "'.");
+    return;
+  }
+
+  if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(&expr)) {
+    auto struct_it = struct_indices_.find(struct_lit->struct_name);
+    if (struct_it == struct_indices_.end()) {
+      error_at(struct_lit->location, "Unknown struct type '" + struct_lit->struct_name + "'.");
+      return;
+    }
+    int type_idx = struct_it->second;
+    const auto &meta = chunk_.struct_metas()[static_cast<std::size_t>(type_idx)];
+    // Emit fields in declaration order
+    for (const auto &field_name : meta.field_names) {
+      bool found = false;
+      for (const auto &init : struct_lit->fields) {
+        if (init.name == field_name) {
+          compile_expr(*init.value);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        emit(OpCode::Null, struct_lit->location);
+      }
+    }
+    emit_operand(OpCode::StructNew, static_cast<uint32_t>((type_idx << 16) |
+                 static_cast<int>(meta.field_names.size())), struct_lit->location);
+    return;
+  }
+
+  if (const auto *field_access = dynamic_cast<const ast::FieldAccessExpr *>(&expr)) {
+    compile_expr(*field_access->object);
+    uint32_t field_const = chunk_.add_constant(Value::string_value(field_access->field_name));
+    emit_operand(OpCode::FieldGet, field_const, field_access->location);
+    return;
+  }
+
+  if (const auto *field_assign = dynamic_cast<const ast::FieldAssignExpr *>(&expr)) {
+    compile_expr(*field_assign->object);
+    compile_expr(*field_assign->value);
+    uint32_t field_const = chunk_.add_constant(Value::string_value(field_assign->field_name));
+    emit_operand(OpCode::FieldSet, field_const, field_assign->location);
     return;
   }
 

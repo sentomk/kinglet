@@ -8,7 +8,18 @@ namespace kinglet {
 
 namespace {
 
-Type resolve_type_name(const std::string &name) {
+std::string type_to_string(const Type &type) {
+  if (type.kind == TypeKind::Struct || type.kind == TypeKind::Enum) {
+    return type.name;
+  }
+  std::ostringstream oss;
+  oss << type.kind;
+  return oss.str();
+}
+
+} // namespace
+
+Type TypeChecker::resolve_type_name(const std::string &name) const {
   if (name == "int" || name == "auto") {
     return int_type();
   }
@@ -24,31 +35,45 @@ Type resolve_type_name(const std::string &name) {
   if (name == "void") {
     return void_type();
   }
+  auto it = type_registry_.find(name);
+  if (it != type_registry_.end()) {
+    return it->second;
+  }
   return int_type();
 }
-
-std::string type_to_string(const Type &type) {
-  std::ostringstream oss;
-  oss << type.kind;
-  return oss.str();
-}
-
-} // namespace
 
 TypeCheckResult TypeChecker::check(const ast::Program &program) {
   errors_.clear();
   scopes_.clear();
   used_.clear();
   opened_.clear();
+  type_registry_.clear();
 
   push_scope();
 
+  // First pass: register types, using declarations, and function signatures
   for (const ast::DeclPtr &decl : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
       used_.insert(using_decl->namespace_name);
       if (using_decl->is_namespace) {
         opened_.insert(using_decl->namespace_name);
       }
+      continue;
+    }
+    if (const auto *struct_decl = dynamic_cast<const ast::StructDecl *>(decl.get())) {
+      Type struct_type(TypeKind::Struct);
+      struct_type.name = struct_decl->name;
+      for (const auto &field : struct_decl->fields) {
+        struct_type.fields.push_back(FieldInfo{field.name, resolve_type_name(field.type).kind});
+      }
+      type_registry_.insert_or_assign(struct_decl->name, struct_type);
+      continue;
+    }
+    if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(decl.get())) {
+      Type enum_type(TypeKind::Enum);
+      enum_type.name = enum_decl->name;
+      enum_type.variants = enum_decl->variants;
+      type_registry_.insert_or_assign(enum_decl->name, enum_type);
       continue;
     }
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
@@ -64,8 +89,15 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
     }
   }
 
+  // Second pass: check function bodies
   for (const ast::DeclPtr &decl : program.declarations) {
     if (dynamic_cast<const ast::UsingDecl *>(decl.get())) {
+      continue;
+    }
+    if (dynamic_cast<const ast::StructDecl *>(decl.get())) {
+      continue;
+    }
+    if (dynamic_cast<const ast::EnumDecl *>(decl.get())) {
       continue;
     }
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
@@ -230,6 +262,18 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         return string_type();
       }
     }
+    auto enum_type = lookup_type(ns_access->namespace_name);
+    if (enum_type.has_value() && enum_type->kind == TypeKind::Enum) {
+      bool found = false;
+      for (const auto &v : enum_type->variants) {
+        if (v == ns_access->member_name) { found = true; break; }
+      }
+      if (!found) {
+        error_at(ns_access->location, "Enum '" + ns_access->namespace_name +
+                                          "' has no variant '" + ns_access->member_name + "'.");
+      }
+      return *enum_type;
+    }
     return void_type();
   }
 
@@ -392,6 +436,55 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     return result_type;
   }
 
+  if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(&expr)) {
+    auto type_opt = lookup_type(struct_lit->struct_name);
+    if (!type_opt.has_value()) {
+      error_at(struct_lit->location, "Unknown struct type '" + struct_lit->struct_name + "'.");
+      return int_type();
+    }
+    if (type_opt->kind != TypeKind::Struct) {
+      error_at(struct_lit->location, "'" + struct_lit->struct_name + "' is not a struct type.");
+      return int_type();
+    }
+    for (const auto &field_init : struct_lit->fields) {
+      check_expr(*field_init.value);
+    }
+    return *type_opt;
+  }
+
+  if (const auto *field_access = dynamic_cast<const ast::FieldAccessExpr *>(&expr)) {
+    Type obj_type = check_expr(*field_access->object);
+    if (obj_type.kind != TypeKind::Struct) {
+      error_at(field_access->location, "Cannot access field on non-struct type.");
+      return int_type();
+    }
+    for (const auto &f : obj_type.fields) {
+      if (f.name == field_access->field_name) {
+        return Type(f.type_kind);
+      }
+    }
+    error_at(field_access->location, "Struct '" + obj_type.name + "' has no field '" +
+                                         field_access->field_name + "'.");
+    return int_type();
+  }
+
+  if (const auto *field_assign = dynamic_cast<const ast::FieldAssignExpr *>(&expr)) {
+    Type obj_type = check_expr(*field_assign->object);
+    Type value_type = check_expr(*field_assign->value);
+    if (obj_type.kind != TypeKind::Struct) {
+      error_at(field_assign->location, "Cannot assign field on non-struct type.");
+      return int_type();
+    }
+    for (const auto &f : obj_type.fields) {
+      if (f.name == field_assign->field_name) {
+        return Type(f.type_kind);
+      }
+    }
+    error_at(field_assign->location, "Struct '" + obj_type.name + "' has no field '" +
+                                         field_assign->field_name + "'.");
+    return int_type();
+  }
+
   return int_type();
 }
 
@@ -423,6 +516,14 @@ std::optional<Type> TypeChecker::lookup_var(const std::string &name) const {
     if (found != it->end()) {
       return found->second.type;
     }
+  }
+  return std::nullopt;
+}
+
+std::optional<Type> TypeChecker::lookup_type(const std::string &name) const {
+  auto it = type_registry_.find(name);
+  if (it != type_registry_.end()) {
+    return it->second;
   }
   return std::nullopt;
 }

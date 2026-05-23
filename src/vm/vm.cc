@@ -86,6 +86,8 @@ VmResult Vm::run(const Chunk &chunk) {
         truthy = !value.string_storage.empty();
         break;
       case ValueType::Function:
+      case ValueType::Struct:
+      case ValueType::Enum:
         truthy = true;
         break;
       }
@@ -182,6 +184,8 @@ VmResult Vm::run(const Chunk &chunk) {
         truthy = !condition.string_storage.empty();
         break;
       case ValueType::Function:
+      case ValueType::Struct:
+      case ValueType::Enum:
         truthy = true;
         break;
       }
@@ -203,13 +207,31 @@ VmResult Vm::run(const Chunk &chunk) {
       Value left = pop();
       bool result = false;
       if (instruction.op == OpCode::Eq) {
-        result = left.type == right.type && left.int_value_storage == right.int_value_storage &&
-                 left.double_value_storage == right.double_value_storage &&
-                 left.bool_value_storage == right.bool_value_storage;
-      } else if (instruction.op == OpCode::Neq) {
-        result = !(left.type == right.type && left.int_value_storage == right.int_value_storage &&
+        if (left.type != right.type) {
+          result = false;
+        } else if (left.type == ValueType::Enum) {
+          result = left.enum_type_index == right.enum_type_index &&
+                   left.enum_variant_index == right.enum_variant_index;
+        } else if (left.type == ValueType::String) {
+          result = left.string_storage == right.string_storage;
+        } else {
+          result = left.int_value_storage == right.int_value_storage &&
                    left.double_value_storage == right.double_value_storage &&
-                   left.bool_value_storage == right.bool_value_storage);
+                   left.bool_value_storage == right.bool_value_storage;
+        }
+      } else if (instruction.op == OpCode::Neq) {
+        if (left.type != right.type) {
+          result = true;
+        } else if (left.type == ValueType::Enum) {
+          result = left.enum_type_index != right.enum_type_index ||
+                   left.enum_variant_index != right.enum_variant_index;
+        } else if (left.type == ValueType::String) {
+          result = left.string_storage != right.string_storage;
+        } else {
+          result = !(left.int_value_storage == right.int_value_storage &&
+                     left.double_value_storage == right.double_value_storage &&
+                     left.bool_value_storage == right.bool_value_storage);
+        }
       } else {
         if (!left.is_number() || !right.is_number()) {
           return runtime_error("Comparison operands must be numeric.");
@@ -327,6 +349,79 @@ VmResult Vm::run(const Chunk &chunk) {
       } else {
         push(Value::string_value(std::move(line)));
       }
+      break;
+    }
+    case OpCode::StructNew: {
+      int type_idx = instruction.operand >> 16;
+      int field_count = instruction.operand & 0xFFFF;
+      if (static_cast<int>(stack_.size()) < field_count) {
+        return runtime_error("Stack underflow for struct creation.");
+      }
+      std::vector<Value> fields(static_cast<std::size_t>(field_count));
+      for (int i = field_count - 1; i >= 0; --i) {
+        fields[static_cast<std::size_t>(i)] = pop();
+      }
+      push(Value::struct_value(type_idx, std::move(fields)));
+      break;
+    }
+    case OpCode::FieldGet: {
+      if (stack_.empty()) {
+        return runtime_error("Stack underflow for field access.");
+      }
+      Value obj = pop();
+      if (obj.type != ValueType::Struct || !obj.struct_storage) {
+        return runtime_error("Cannot access field on non-struct value.");
+      }
+      const std::string &field_name =
+          constants[static_cast<std::size_t>(instruction.operand)].string_storage;
+      int type_idx = obj.struct_storage->type_index;
+      const auto &meta = frame.chunk->struct_metas()[static_cast<std::size_t>(type_idx)];
+      int field_idx = -1;
+      for (int i = 0; i < static_cast<int>(meta.field_names.size()); ++i) {
+        if (meta.field_names[static_cast<std::size_t>(i)] == field_name) {
+          field_idx = i;
+          break;
+        }
+      }
+      if (field_idx < 0 ||
+          static_cast<std::size_t>(field_idx) >= obj.struct_storage->fields.size()) {
+        return runtime_error("Unknown field '" + field_name + "'.");
+      }
+      push(obj.struct_storage->fields[static_cast<std::size_t>(field_idx)]);
+      break;
+    }
+    case OpCode::FieldSet: {
+      if (stack_.size() < 2) {
+        return runtime_error("Stack underflow for field assignment.");
+      }
+      Value value = pop();
+      Value obj = pop();
+      if (obj.type != ValueType::Struct || !obj.struct_storage) {
+        return runtime_error("Cannot set field on non-struct value.");
+      }
+      const std::string &field_name =
+          constants[static_cast<std::size_t>(instruction.operand)].string_storage;
+      int type_idx = obj.struct_storage->type_index;
+      const auto &meta = frame.chunk->struct_metas()[static_cast<std::size_t>(type_idx)];
+      int field_idx = -1;
+      for (int i = 0; i < static_cast<int>(meta.field_names.size()); ++i) {
+        if (meta.field_names[static_cast<std::size_t>(i)] == field_name) {
+          field_idx = i;
+          break;
+        }
+      }
+      if (field_idx < 0 ||
+          static_cast<std::size_t>(field_idx) >= obj.struct_storage->fields.size()) {
+        return runtime_error("Unknown field '" + field_name + "'.");
+      }
+      obj.struct_storage->fields[static_cast<std::size_t>(field_idx)] = value;
+      push(obj);
+      break;
+    }
+    case OpCode::EnumVariant: {
+      int type_idx = instruction.operand >> 16;
+      int variant_idx = instruction.operand & 0xFFFF;
+      push(Value::enum_value(type_idx, variant_idx));
       break;
     }
     }

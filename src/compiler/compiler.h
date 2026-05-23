@@ -68,6 +68,8 @@ private:
   std::unordered_set<std::string> used_;
   std::unordered_set<std::string> opened_;
   std::unordered_map<std::string, int> function_indices_;
+  std::unordered_map<std::string, int> struct_indices_;
+  std::unordered_map<std::string, int> enum_indices_;
 };
 
 } // namespace kinglet

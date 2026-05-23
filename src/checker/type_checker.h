@@ -34,6 +34,8 @@ private:
   void pop_scope();
   void declare_var(const std::string &name, const Type &type, bool is_mutable);
   std::optional<Type> lookup_var(const std::string &name) const;
+  std::optional<Type> lookup_type(const std::string &name) const;
+  Type resolve_type_name(const std::string &name) const;
   void error_at(ast::SourceLocation location, std::string message);
 
   struct VarInfo {
@@ -42,6 +44,7 @@ private:
   };
 
   std::vector<std::unordered_map<std::string, VarInfo>> scopes_;
+  std::unordered_map<std::string, Type> type_registry_;
   std::vector<TypeError> errors_;
   std::unordered_set<std::string> used_;    // using io;
   std::unordered_set<std::string> opened_;  // using namespace io;

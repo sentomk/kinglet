@@ -15,6 +15,13 @@ enum class TypeKind {
   Void,
   Null,
   Function,
+  Struct,
+  Enum,
+};
+
+struct FieldInfo {
+  std::string name;
+  TypeKind type_kind;
 };
 
 struct Type {
@@ -27,8 +34,11 @@ struct Type {
   static Type promote(const Type &a, const Type &b);
 
   TypeKind kind;
+  std::string name;
   std::vector<Type> param_types;
   std::shared_ptr<Type> return_type;
+  std::vector<FieldInfo> fields;
+  std::vector<std::string> variants;
 };
 
 const Type &int_type();

@@ -7,14 +7,18 @@ namespace kinglet {
 Type::Type(TypeKind kind) : kind(kind) {}
 
 Type::Type(const Type &other)
-    : kind(other.kind), param_types(other.param_types),
-      return_type(other.return_type ? std::make_shared<Type>(*other.return_type) : nullptr) {}
+    : kind(other.kind), name(other.name), param_types(other.param_types),
+      return_type(other.return_type ? std::make_shared<Type>(*other.return_type) : nullptr),
+      fields(other.fields), variants(other.variants) {}
 
 Type &Type::operator=(const Type &other) {
   if (this != &other) {
     kind = other.kind;
+    name = other.name;
     param_types = other.param_types;
     return_type = other.return_type ? std::make_shared<Type>(*other.return_type) : nullptr;
+    fields = other.fields;
+    variants = other.variants;
   }
   return *this;
 }
@@ -25,6 +29,9 @@ bool Type::is_numeric() const {
 
 bool Type::is_compatible_with(const Type &other) const {
   if (kind == other.kind) {
+    if (kind == TypeKind::Struct || kind == TypeKind::Enum) {
+      return name == other.name;
+    }
     return true;
   }
   if (is_numeric() && other.is_numeric()) {
@@ -94,6 +101,10 @@ std::ostream &operator<<(std::ostream &out, TypeKind kind) {
     return out << "Null";
   case TypeKind::Function:
     return out << "Function";
+  case TypeKind::Struct:
+    return out << "Struct";
+  case TypeKind::Enum:
+    return out << "Enum";
   }
   return out << "Unknown";
 }

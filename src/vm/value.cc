@@ -41,6 +41,21 @@ Value Value::function_value(int index) {
   return result;
 }
 
+Value Value::struct_value(int type_index, std::vector<Value> fields) {
+  Value result;
+  result.type = ValueType::Struct;
+  result.struct_storage = std::make_shared<StructData>(StructData{type_index, std::move(fields)});
+  return result;
+}
+
+Value Value::enum_value(int type_index, int variant_index) {
+  Value result;
+  result.type = ValueType::Enum;
+  result.enum_type_index = type_index;
+  result.enum_variant_index = variant_index;
+  return result;
+}
+
 bool Value::is_number() const {
   return type == ValueType::Int || type == ValueType::Double;
 }
@@ -71,6 +86,12 @@ std::ostream &operator<<(std::ostream &out, const Value &value) {
     break;
   case ValueType::Function:
     out << "<function:" << value.function_index_storage << ">";
+    break;
+  case ValueType::Struct:
+    out << "<struct:" << value.struct_storage->type_index << ">";
+    break;
+  case ValueType::Enum:
+    out << "<enum:" << value.enum_type_index << ":" << value.enum_variant_index << ">";
     break;
   }
   return out;
