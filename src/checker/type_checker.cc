@@ -210,8 +210,18 @@ void TypeChecker::check_function(const ast::FunctionDecl &function) {
 void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return) {
   if (const auto *block = dynamic_cast<const ast::BlockStmt *>(&stmt)) {
     push_scope();
+    bool returned = false;
     for (const ast::StmtPtr &statement : block->statements) {
+      if (returned) {
+        warn_at(statement->location, "Unreachable code.");
+        break;
+      }
       check_stmt(*statement, expected_return);
+      if (dynamic_cast<const ast::ReturnStmt *>(statement.get()) ||
+          dynamic_cast<const ast::BreakStmt *>(statement.get()) ||
+          dynamic_cast<const ast::ContinueStmt *>(statement.get())) {
+        returned = true;
+      }
     }
     pop_scope();
     return;

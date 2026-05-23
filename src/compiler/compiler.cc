@@ -150,13 +150,7 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
     push_scope();
     bool returned = false;
     for (const ast::StmtPtr &statement : block->statements) {
-      if (returned) {
-        warnings_.push_back(CompileWarning{
-            .location = statement->location,
-            .message = "Unreachable code after return statement.",
-        });
-        break;
-      }
+      if (returned) break;
       compile_stmt(*statement);
       if (!errors_.empty()) {
         return;
