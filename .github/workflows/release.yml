@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: kinglet-windows-x64
+            ext: .exe
+          - os: ubuntu-latest
+            artifact: kinglet-linux-x64
+            ext: ""
+          - os: macos-latest
+            artifact: kinglet-macos-arm64
+            ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GN
+        uses: aspect-build/setup-gn@v1
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Generate build files
+        run: gn gen out/Release --args='is_debug=false'
+
+      - name: Build
+        run: ninja -C out/Release
+
+      - name: Package binaries
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp out/Release/kinglet${{ matrix.ext }} dist/
+          cp out/Release/kinglet-lsp${{ matrix.ext }} dist/
+          cd dist && tar czf ../${{ matrix.artifact }}.tar.gz *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+
+  package-vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: editors/vscode
+        run: npm install
+
+      - name: Package extension
+        working-directory: editors/vscode
+        run: npx @vscode/vsce package
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: kinglet-vsix
+          path: editors/vscode/*.vsix
+
+  release:
+    needs: [build, package-vsix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/kinglet-windows-x64/*.tar.gz
+            artifacts/kinglet-linux-x64/*.tar.gz
+            artifacts/kinglet-macos-arm64/*.tar.gz
+            artifacts/kinglet-vsix/*.vsix

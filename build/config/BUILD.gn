@@ -1,9 +1,19 @@
+declare_args() {
+  is_debug = true
+}
+
 config("compiler") {
   cflags_cc = [
     "-std=c++20",
   ]
 
-  defines = []
+  if (!is_debug) {
+    cflags = [ "-O2" ]
+    defines = [ "NDEBUG" ]
+  } else {
+    cflags = [ "-g" ]
+    defines = []
+  }
 }
 
 config("warnings") {
