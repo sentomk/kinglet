@@ -8,6 +8,12 @@
 
 <p align="center">A bytecode-compiled language implementing the C++ proposals that deserved to ship.</p>
 
+<p align="center">
+  <a href="https://github.com/sentomk/kinglet/releases"><img src="https://img.shields.io/github/v/tag/sentomk/kinglet?label=version&sort=semver" alt="Version"></a>
+  <a href="https://github.com/sentomk/kinglet/actions"><img src="https://img.shields.io/github/actions/workflow/status/sentomk/kinglet/ci.yml?branch=main" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/sentomk/kinglet" alt="License"></a>
+</p>
+
 > [!NOTE]
 > Familiar semantics. Curated features from WG21 proposals that were deferred or rejected. A VM small enough to embed anywhere.
 
@@ -33,7 +39,7 @@ tar xzf kinglet-<platform>.tar.gz
 Install the `.vsix` from the same release page:
 
 ```bash
-code --install-extension kinglet-0.0.1.vsix
+code --install-extension kinglet-0.0.2.vsix
 ```
 
 Or build from source — see below.
@@ -56,24 +62,32 @@ struct Point {
   int y;
 }
 
-enum Direction {
-  Up,
-  Down,
-  Left,
-  Right,
+struct Box<T> {
+  T value;
+}
+
+T identity<T>(T x) => x;
+
+int distance_sq(Point a, Point b) {
+  int dx = a.x - b.x;
+  int dy = a.y - b.y;
+  return dx * dx + dy * dy;
 }
 
 int main() {
-  Point p { 10, 20 };
-  io::out(p.x);
-  io::out(p.y);
+  Point origin { 0, 0 };
+  Point target { 3, 4 };
+  io::out("{}\n", distance_sq(origin, target)); // 25
 
-  Direction d = Direction::Up;
-  inspect (d) {
-    Direction::Up => io::out("going up"),
-    Direction::Down => io::out("going down"),
-    _ => io::out("sideways")
-  };
+  Box<int> bi { 42 };
+  Box<string> bs { "hello" };
+  io::out("{}\n", bi.value);            // 42
+  io::out("{}\n", identity<string>("world")); // world
+
+  // Mutation
+  target.x = 6;
+  target.y = 8;
+  io::out("{}\n", distance_sq(origin, target)); // 100
 
   return 0;
 }
@@ -83,7 +97,10 @@ int main() {
 
 ```cpp
 // Types
-int x = 42;          auto x = 42;         const x = 42;
+int x = 42;
+double pi = 3.14;
+string name = "kinglet";
+bool flag = true;
 
 // Structs & Enums
 struct Vec2 { int x; int y; }
@@ -91,22 +108,37 @@ enum Color { Red, Green, Blue, }
 Vec2 v { 1, 2 };
 Color c = Color::Red;
 
+// Generics (monomorphized)
+struct Pair<A, B> { A first; B second; }
+T identity<T>(T x) => x;
+Pair<int, string> p { 1, "one" };
+int n = identity<int>(42);
+
 // Control flow
-if (x > 0) { ... } else { ... }
-while (x < 10) { ... }
-for (int i = 0; i < 10; i += 1) { ... }
+if x > 0 { ... } else { ... }
+while count > 0 { ... }
+for (int i = 0; i < 10; i = i + 1) { ... }
 
 // Pattern matching
-auto r = inspect (x) { 1 => a, 2 => b, _ => c };
+string r = inspect value {
+  0 => "zero",
+  1 => "one",
+  _ => "other",
+};
 
 // I/O
-using io;           io::out("{}", x);
-using namespace io; out("hello\n");
+using io;
+io::out("{} + {} = {}\n", 1, 2, 3);
+string line = io::in("prompt> ");
 
 // Functions
 int add(int a, int b) => a + b;
+int factorial(int n) {
+  if n <= 1 { return 1; }
+  return n * factorial(n - 1);
+}
 ```
 
 ## Operators
 
-`+` `-` `*` `/` `%` `==` `!=` `<` `>` `<=` `>=` `&&` `||` `!` `~` `=` `+=` `-=` `*=` `/=`
+`+` `-` `*` `/` `%` `==` `!=` `<` `>` `<=` `>=` `&&` `||` `!` `~`
