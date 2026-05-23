@@ -13,7 +13,7 @@ static_library("lsp") {
     "transport.h",
   ]
 
-  deps = [
+  public_deps = [
     "//src/checker",
     "//src/lexer",
     "//src/parser",
