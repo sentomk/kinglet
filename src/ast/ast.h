@@ -69,6 +69,12 @@ using ExprPtr = std::unique_ptr<Expr>;
 using StmtPtr = std::unique_ptr<Stmt>;
 using DeclPtr = std::unique_ptr<Decl>;
 
+struct TypeExpr {
+  std::string name;
+  std::vector<TypeExpr> type_args;
+  std::string to_string() const;
+};
+
 struct IntLiteralExpr final : Expr {
   IntLiteralExpr(SourceLocation location, int64_t value);
   void print(std::ostream &out, int indent = 0) const override;
@@ -136,10 +142,12 @@ struct AssignExpr final : Expr {
 };
 
 struct CallExpr final : Expr {
-  CallExpr(SourceLocation location, ExprPtr callee, std::vector<ExprPtr> args);
+  CallExpr(SourceLocation location, ExprPtr callee, std::vector<TypeExpr> type_args,
+           std::vector<ExprPtr> args);
   void print(std::ostream &out, int indent = 0) const override;
 
   ExprPtr callee;
+  std::vector<TypeExpr> type_args;
   std::vector<ExprPtr> args;
 };
 
@@ -171,12 +179,12 @@ struct ReturnStmt final : Stmt {
 };
 
 struct VarDeclStmt final : Stmt {
-  VarDeclStmt(SourceLocation location, std::string storage, std::string type, std::string name,
+  VarDeclStmt(SourceLocation location, std::string storage, TypeExpr type, std::string name,
               ExprPtr init);
   void print(std::ostream &out, int indent = 0) const override;
 
   std::string storage;
-  std::string type;
+  TypeExpr type;
   std::string name;
   ExprPtr init;
 };
@@ -226,17 +234,18 @@ struct ContinueStmt final : Stmt {
 };
 
 struct Parameter {
-  std::string type;
+  TypeExpr type;
   std::string name;
 };
 
 struct FunctionDecl final : Decl {
-  FunctionDecl(SourceLocation location, std::string return_type, std::string name,
-               std::vector<Parameter> params, StmtPtr body);
+  FunctionDecl(SourceLocation location, TypeExpr return_type, std::string name,
+               std::vector<std::string> type_params, std::vector<Parameter> params, StmtPtr body);
   void print(std::ostream &out, int indent = 0) const override;
 
-  std::string return_type;
+  TypeExpr return_type;
   std::string name;
+  std::vector<std::string> type_params;
   std::vector<Parameter> params;
   StmtPtr body;
 };
@@ -283,7 +292,7 @@ struct FieldAssignExpr final : Expr {
 };
 
 struct FieldDef {
-  std::string type;
+  TypeExpr type;
   std::string name;
 };
 
@@ -292,19 +301,21 @@ struct StructLiteralExpr final : Expr {
     std::string name;
     ExprPtr value;
   };
-  StructLiteralExpr(SourceLocation location, std::string struct_name,
+  StructLiteralExpr(SourceLocation location, TypeExpr struct_type,
                     std::vector<FieldInit> fields);
   void print(std::ostream &out, int indent = 0) const override;
 
-  std::string struct_name;
+  TypeExpr struct_type;
   std::vector<FieldInit> fields;
 };
 
 struct StructDecl final : Decl {
-  StructDecl(SourceLocation location, std::string name, std::vector<FieldDef> fields);
+  StructDecl(SourceLocation location, std::string name, std::vector<std::string> type_params,
+             std::vector<FieldDef> fields);
   void print(std::ostream &out, int indent = 0) const override;
 
   std::string name;
+  std::vector<std::string> type_params;
   std::vector<FieldDef> fields;
 };
 

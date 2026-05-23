@@ -42,6 +42,10 @@ Type TypeChecker::resolve_type_name(const std::string &name) const {
   return int_type();
 }
 
+Type TypeChecker::resolve_type_expr(const ast::TypeExpr &expr) const {
+  return resolve_type_name(expr.to_string());
+}
+
 TypeCheckResult TypeChecker::check(const ast::Program &program) {
   errors_.clear();
   scopes_.clear();
@@ -64,7 +68,7 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       Type struct_type(TypeKind::Struct);
       struct_type.name = struct_decl->name;
       for (const auto &field : struct_decl->fields) {
-        struct_type.fields.push_back(FieldInfo{field.name, resolve_type_name(field.type).kind});
+        struct_type.fields.push_back(FieldInfo{field.name, resolve_type_expr(field.type).kind});
       }
       type_registry_.insert_or_assign(struct_decl->name, struct_type);
       continue;
@@ -77,10 +81,10 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       continue;
     }
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
-      Type return_type = resolve_type_name(func->return_type);
+      Type return_type = resolve_type_expr(func->return_type);
       std::vector<Type> param_types;
       for (const auto &param : func->params) {
-        param_types.push_back(resolve_type_name(param.type));
+        param_types.push_back(resolve_type_expr(param.type));
       }
       Type func_type(TypeKind::Function);
       func_type.param_types = std::move(param_types);
@@ -111,12 +115,12 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
 }
 
 void TypeChecker::check_function(const ast::FunctionDecl &function) {
-  Type return_type = resolve_type_name(function.return_type);
+  Type return_type = resolve_type_expr(function.return_type);
 
   push_scope();
 
   for (const auto &param : function.params) {
-    Type param_type = resolve_type_name(param.type);
+    Type param_type = resolve_type_expr(param.type);
     declare_var(param.name, param_type, true);
   }
 
@@ -152,10 +156,10 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
   }
 
   if (const auto *var_decl = dynamic_cast<const ast::VarDeclStmt *>(&stmt)) {
-    Type var_type = resolve_type_name(var_decl->type);
+    Type var_type = resolve_type_expr(var_decl->type);
     if (var_decl->init) {
       Type init_type = check_expr(*var_decl->init);
-      if (var_decl->type == "auto") {
+      if (var_decl->type.name == "auto") {
         var_type = init_type;
       } else if (!init_type.is_compatible_with(var_type)) {
         error_at(var_decl->location,
@@ -437,13 +441,14 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
   }
 
   if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(&expr)) {
-    auto type_opt = lookup_type(struct_lit->struct_name);
+    std::string type_name = struct_lit->struct_type.to_string();
+    auto type_opt = lookup_type(type_name);
     if (!type_opt.has_value()) {
-      error_at(struct_lit->location, "Unknown struct type '" + struct_lit->struct_name + "'.");
+      error_at(struct_lit->location, "Unknown struct type '" + type_name + "'.");
       return int_type();
     }
     if (type_opt->kind != TypeKind::Struct) {
-      error_at(struct_lit->location, "'" + struct_lit->struct_name + "' is not a struct type.");
+      error_at(struct_lit->location, "'" + type_name + "' is not a struct type.");
       return int_type();
     }
     for (const auto &field_init : struct_lit->fields) {

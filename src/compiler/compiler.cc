@@ -559,9 +559,10 @@ void Compiler::compile_expr(const ast::Expr &expr) {
   }
 
   if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(&expr)) {
-    auto struct_it = struct_indices_.find(struct_lit->struct_name);
+    std::string type_name = struct_lit->struct_type.to_string();
+    auto struct_it = struct_indices_.find(type_name);
     if (struct_it == struct_indices_.end()) {
-      error_at(struct_lit->location, "Unknown struct type '" + struct_lit->struct_name + "'.");
+      error_at(struct_lit->location, "Unknown struct type '" + type_name + "'.");
       return;
     }
     int type_idx = struct_it->second;

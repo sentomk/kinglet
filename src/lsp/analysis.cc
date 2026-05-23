@@ -23,9 +23,9 @@ private:
       Symbol sym;
       sym.name = func->name;
       sym.kind = SymbolKind::Function;
-      sym.type_name = func->return_type;
+      sym.type_name = func->return_type.to_string();
       sym.location = func->location;
-      sym.return_type = func->return_type;
+      sym.return_type = func->return_type.to_string();
       sym.params = func->params;
       sym.scope_start_line = 0;
       sym.scope_end_line = 999999;
@@ -35,7 +35,7 @@ private:
         Symbol psym;
         psym.name = param.name;
         psym.kind = SymbolKind::Parameter;
-        psym.type_name = param.type;
+        psym.type_name = param.type.to_string();
         psym.location = func->location;
         psym.scope_start_line = func->location.line;
         psym.scope_end_line = 999999;
@@ -54,7 +54,7 @@ private:
       sym.scope_start_line = 0;
       sym.scope_end_line = 999999;
       for (const auto &field : struct_decl->fields) {
-        sym.fields.push_back(FieldSymbol{field.name, field.type});
+        sym.fields.push_back(FieldSymbol{field.name, field.type.to_string()});
       }
       table_.symbols.push_back(std::move(sym));
     } else if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(&decl)) {
@@ -82,7 +82,7 @@ private:
       Symbol sym;
       sym.name = var->name;
       sym.kind = SymbolKind::Variable;
-      sym.type_name = var->type;
+      sym.type_name = var->type.to_string();
       sym.location = var->location;
       sym.scope_start_line = var->location.line;
       sym.scope_end_line = 999999;

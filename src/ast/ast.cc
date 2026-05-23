@@ -5,6 +5,17 @@
 
 namespace kinglet::ast {
 
+std::string TypeExpr::to_string() const {
+  if (type_args.empty()) return name;
+  std::string result = name + "<";
+  for (size_t i = 0; i < type_args.size(); ++i) {
+    if (i > 0) result += ", ";
+    result += type_args[i].to_string();
+  }
+  result += ">";
+  return result;
+}
+
 const char *binary_op_name(BinaryOp op) {
   switch (op) {
   case BinaryOp::Add:
@@ -163,8 +174,10 @@ void AssignExpr::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-CallExpr::CallExpr(SourceLocation location, ExprPtr callee, std::vector<ExprPtr> args)
-    : Expr(location), callee(std::move(callee)), args(std::move(args)) {}
+CallExpr::CallExpr(SourceLocation location, ExprPtr callee, std::vector<TypeExpr> type_args,
+                   std::vector<ExprPtr> args)
+    : Expr(location), callee(std::move(callee)), type_args(std::move(type_args)),
+      args(std::move(args)) {}
 
 void CallExpr::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
@@ -215,7 +228,7 @@ void ReturnStmt::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-VarDeclStmt::VarDeclStmt(SourceLocation location, std::string storage, std::string type,
+VarDeclStmt::VarDeclStmt(SourceLocation location, std::string storage, TypeExpr type,
                          std::string name, ExprPtr init)
     : Stmt(location), storage(std::move(storage)), type(std::move(type)),
       name(std::move(name)), init(std::move(init)) {}
@@ -226,8 +239,8 @@ void VarDeclStmt::print(std::ostream &out, int indent) const {
   if (!storage.empty()) {
     out << " storage=" << storage;
   }
-  if (!type.empty()) {
-    out << " type=" << type;
+  if (!type.name.empty()) {
+    out << " type=" << type.to_string();
   }
   out << " name=" << name;
   if (init) {
@@ -319,16 +332,17 @@ void ContinueStmt::print(std::ostream &out, int indent) const {
   out << "(continue)";
 }
 
-FunctionDecl::FunctionDecl(SourceLocation location, std::string return_type, std::string name,
-                           std::vector<Parameter> params, StmtPtr body)
+FunctionDecl::FunctionDecl(SourceLocation location, TypeExpr return_type, std::string name,
+                           std::vector<std::string> type_params, std::vector<Parameter> params,
+                           StmtPtr body)
     : Decl(location), return_type(std::move(return_type)), name(std::move(name)),
-      params(std::move(params)), body(std::move(body)) {}
+      type_params(std::move(type_params)), params(std::move(params)), body(std::move(body)) {}
 
 void FunctionDecl::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
-  out << "(function " << return_type << ' ' << name << " (params";
+  out << "(function " << return_type.to_string() << ' ' << name << " (params";
   for (const Parameter &param : params) {
-    out << " (" << param.type << ' ' << param.name << ')';
+    out << " (" << param.type.to_string() << ' ' << param.name << ')';
   }
   out << ")";
   print_child(out, *body, indent);
@@ -388,13 +402,13 @@ void FieldAssignExpr::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-StructLiteralExpr::StructLiteralExpr(SourceLocation location, std::string struct_name,
+StructLiteralExpr::StructLiteralExpr(SourceLocation location, TypeExpr struct_type,
                                      std::vector<FieldInit> fields)
-    : Expr(location), struct_name(std::move(struct_name)), fields(std::move(fields)) {}
+    : Expr(location), struct_type(std::move(struct_type)), fields(std::move(fields)) {}
 
 void StructLiteralExpr::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
-  out << "(struct-literal " << struct_name;
+  out << "(struct-literal " << struct_type.to_string();
   for (const FieldInit &f : fields) {
     out << '\n';
     write_indent(out, indent + 1);
@@ -405,8 +419,10 @@ void StructLiteralExpr::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-StructDecl::StructDecl(SourceLocation location, std::string name, std::vector<FieldDef> fields)
-    : Decl(location), name(std::move(name)), fields(std::move(fields)) {}
+StructDecl::StructDecl(SourceLocation location, std::string name,
+                       std::vector<std::string> type_params, std::vector<FieldDef> fields)
+    : Decl(location), name(std::move(name)), type_params(std::move(type_params)),
+      fields(std::move(fields)) {}
 
 void StructDecl::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
@@ -414,7 +430,7 @@ void StructDecl::print(std::ostream &out, int indent) const {
   for (const FieldDef &f : fields) {
     out << '\n';
     write_indent(out, indent + 1);
-    out << "(" << f.type << ' ' << f.name << ")";
+    out << "(" << f.type.to_string() << ' ' << f.name << ")";
   }
   out << ")";
 }

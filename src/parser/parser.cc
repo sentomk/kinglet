@@ -139,11 +139,21 @@ ast::DeclPtr Parser::using_declaration() {
 ast::DeclPtr Parser::struct_declaration() {
   const Token &struct_token = previous();
   const Token &name = consume(TokenType::IDENTIFIER, "Expected struct name.");
+
+  std::vector<std::string> type_params;
+  if (match(TokenType::LESS)) {
+    do {
+      const Token &param = consume(TokenType::IDENTIFIER, "Expected type parameter name.");
+      type_params.push_back(token_text(param));
+    } while (match(TokenType::COMMA));
+    consume(TokenType::GREATER, "Expected '>' after type parameters.");
+  }
+
   consume(TokenType::LEFT_BRACE, "Expected '{' after struct name.");
 
   std::vector<ast::FieldDef> fields;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
-    std::string type = parse_type_name();
+    ast::TypeExpr type = parse_type_expr();
     const Token &field_name = consume(TokenType::IDENTIFIER, "Expected field name.");
     consume(TokenType::SEMICOLON, "Expected ';' after field declaration.");
     fields.push_back(ast::FieldDef{std::move(type), token_text(field_name)});
@@ -151,7 +161,7 @@ ast::DeclPtr Parser::struct_declaration() {
   consume(TokenType::RIGHT_BRACE, "Expected '}' after struct body.");
 
   return std::make_unique<ast::StructDecl>(location_of(struct_token), token_text(name),
-                                           std::move(fields));
+                                           std::move(type_params), std::move(fields));
 }
 
 ast::DeclPtr Parser::enum_declaration() {
@@ -175,14 +185,25 @@ ast::DeclPtr Parser::enum_declaration() {
 
 ast::DeclPtr Parser::function_declaration() {
   const Token &return_type_token = peek();
-  std::string return_type = parse_type_name();
+  ast::TypeExpr return_type = parse_type_expr();
   const Token &name = consume(TokenType::IDENTIFIER, "Expected function name.");
+
+  std::vector<std::string> type_params;
+  if (match(TokenType::LESS)) {
+    do {
+      const Token &param = consume(TokenType::IDENTIFIER, "Expected type parameter name.");
+      type_params.push_back(token_text(param));
+    } while (match(TokenType::COMMA));
+    consume(TokenType::GREATER, "Expected '>' after type parameters.");
+  }
+
   consume(TokenType::LEFT_PAREN, "Expected '(' after function name.");
   std::vector<ast::Parameter> params = parameters();
   consume(TokenType::RIGHT_PAREN, "Expected ')' after parameter list.");
   ast::StmtPtr body = function_body();
   return std::make_unique<ast::FunctionDecl>(location_of(return_type_token), std::move(return_type),
-                                             token_text(name), std::move(params), std::move(body));
+                                             token_text(name), std::move(type_params),
+                                             std::move(params), std::move(body));
 }
 
 ast::StmtPtr Parser::statement() {
@@ -309,10 +330,10 @@ ast::StmtPtr Parser::var_declaration() {
     storage = token_text(previous());
   }
 
-  std::string type;
+  ast::TypeExpr type;
   Token name = peek();
   if (is_type_start(peek().type) && check_next(TokenType::IDENTIFIER)) {
-    type = parse_type_name();
+    type = parse_type_expr();
     name = consume(TokenType::IDENTIFIER, "Expected variable name.");
   } else {
     name = consume(TokenType::IDENTIFIER, "Expected variable name.");
@@ -321,8 +342,7 @@ ast::StmtPtr Parser::var_declaration() {
   ast::ExprPtr init;
   if (match(TokenType::EQUAL)) {
     init = expression();
-  } else if (!type.empty() && check(TokenType::LEFT_BRACE)) {
-    // Direct initialization: Point p { 2, 3 };
+  } else if (!type.name.empty() && check(TokenType::LEFT_BRACE)) {
     advance(); // consume '{'
     std::vector<ast::StructLiteralExpr::FieldInit> fields;
     while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
@@ -464,7 +484,8 @@ ast::ExprPtr Parser::call() {
       }
       consume(TokenType::RIGHT_PAREN, "Expected ')' after arguments.");
       const ast::SourceLocation location = expr->location;
-      expr = std::make_unique<ast::CallExpr>(location, std::move(expr), std::move(args));
+      expr = std::make_unique<ast::CallExpr>(location, std::move(expr),
+                                             std::vector<ast::TypeExpr>{}, std::move(args));
     } else if (match(TokenType::DOT)) {
       const Token &field = consume(TokenType::IDENTIFIER, "Expected field name after '.'.");
       const ast::SourceLocation location = expr->location;
@@ -534,7 +555,8 @@ ast::ExprPtr Parser::primary() {
       }
       consume(TokenType::RIGHT_BRACE, "Expected '}' after struct literal.");
       return std::make_unique<ast::StructLiteralExpr>(location_of(identifier),
-                                                      token_text(identifier), std::move(fields));
+                                                      ast::TypeExpr{token_text(identifier), {}},
+                                                      std::move(fields));
     }
     return std::make_unique<ast::IdentifierExpr>(location_of(identifier), token_text(identifier));
   }
@@ -585,7 +607,7 @@ std::vector<ast::Parameter> Parser::parameters() {
   }
 
   do {
-    std::string type = parse_type_name();
+    ast::TypeExpr type = parse_type_expr();
     const Token &name = consume(TokenType::IDENTIFIER, "Expected parameter name.");
     params.push_back(ast::Parameter{std::move(type), token_text(name)});
   } while (match(TokenType::COMMA));
@@ -613,10 +635,15 @@ bool Parser::is_at_end() const {
 }
 
 bool Parser::check(TokenType type) const {
+  if (type == TokenType::GREATER && pending_greater_) return true;
   return !is_at_end() && peek().type == type;
 }
 
 bool Parser::check_next(TokenType type) const {
+  if (pending_greater_) {
+    if (type == TokenType::GREATER) return true;
+    return current_ < tokens_.size() && tokens_[current_].type == type;
+  }
   return current_ + 1 < tokens_.size() && tokens_[current_ + 1].type == type;
 }
 
@@ -625,6 +652,10 @@ bool Parser::check_after_next(TokenType type) const {
 }
 
 bool Parser::match(TokenType type) {
+  if (type == TokenType::GREATER && pending_greater_) {
+    pending_greater_ = false;
+    return true;
+  }
   if (!check(type)) {
     return false;
   }
@@ -685,12 +716,50 @@ bool Parser::is_declaration_start() const {
   if (check(TokenType::CONST)) {
     return true;
   }
-  return is_type_start(peek().type) && check_next(TokenType::IDENTIFIER);
+  if (!is_type_start(peek().type)) return false;
+  // Skip balanced <...> to find the identifier after the type
+  size_t pos = current_ + 1;
+  if (pos < tokens_.size() && tokens_[pos].type == TokenType::LESS) {
+    int depth = 1;
+    ++pos;
+    while (pos < tokens_.size() && depth > 0) {
+      if (tokens_[pos].type == TokenType::LESS) ++depth;
+      else if (tokens_[pos].type == TokenType::GREATER) --depth;
+      else if (tokens_[pos].type == TokenType::GREATER_GREATER) depth -= 2;
+      ++pos;
+    }
+  }
+  return pos < tokens_.size() && tokens_[pos].type == TokenType::IDENTIFIER;
 }
 
 bool Parser::is_function_declaration_start() const {
-  return is_type_start(peek().type) && check_next(TokenType::IDENTIFIER) &&
-         check_after_next(TokenType::LEFT_PAREN);
+  if (!is_type_start(peek().type)) return false;
+  // Skip balanced <...> after the type name to find IDENTIFIER then '(' or '<'
+  size_t pos = current_ + 1;
+  if (pos < tokens_.size() && tokens_[pos].type == TokenType::LESS) {
+    int depth = 1;
+    ++pos;
+    while (pos < tokens_.size() && depth > 0) {
+      if (tokens_[pos].type == TokenType::LESS) ++depth;
+      else if (tokens_[pos].type == TokenType::GREATER) --depth;
+      else if (tokens_[pos].type == TokenType::GREATER_GREATER) depth -= 2;
+      ++pos;
+    }
+  }
+  if (pos >= tokens_.size() || tokens_[pos].type != TokenType::IDENTIFIER) return false;
+  ++pos; // skip function name
+  // Function may have type params: name<T>(...)
+  if (pos < tokens_.size() && tokens_[pos].type == TokenType::LESS) {
+    int depth = 1;
+    ++pos;
+    while (pos < tokens_.size() && depth > 0) {
+      if (tokens_[pos].type == TokenType::LESS) ++depth;
+      else if (tokens_[pos].type == TokenType::GREATER) --depth;
+      else if (tokens_[pos].type == TokenType::GREATER_GREATER) depth -= 2;
+      ++pos;
+    }
+  }
+  return pos < tokens_.size() && tokens_[pos].type == TokenType::LEFT_PAREN;
 }
 
 ast::SourceLocation Parser::location_of(const Token &token) const {
@@ -704,12 +773,28 @@ std::string Parser::token_text(const Token &token) const {
   return std::string(token.lexeme);
 }
 
-std::string Parser::parse_type_name() {
+ast::TypeExpr Parser::parse_type_expr() {
   if (!is_type_start(peek().type)) {
     error_at(peek(), "Expected type name.");
-    return "<error>";
+    return ast::TypeExpr{"<error>", {}};
   }
-  return token_text(advance());
+  std::string name = token_text(advance());
+  std::vector<ast::TypeExpr> type_args;
+  if (check(TokenType::LESS) && !pending_greater_) {
+    advance(); // consume '<'
+    do {
+      type_args.push_back(parse_type_expr());
+    } while (match(TokenType::COMMA));
+    if (peek().type == TokenType::GREATER_GREATER && !pending_greater_) {
+      advance(); // consume '>>'
+      pending_greater_ = true;
+    } else {
+      if (!match(TokenType::GREATER)) {
+        error_at(peek(), "Expected '>' after type arguments.");
+      }
+    }
+  }
+  return ast::TypeExpr{std::move(name), std::move(type_args)};
 }
 
 void Parser::synchronize() {

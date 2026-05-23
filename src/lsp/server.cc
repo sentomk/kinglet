@@ -260,7 +260,7 @@ json::Value Server::handle_completion(const json::Value &params) {
       detail = sym->return_type + " " + sym->name + "(";
       for (std::size_t i = 0; i < sym->params.size(); ++i) {
         if (i > 0) detail += ", ";
-        detail += sym->params[i].type + " " + sym->params[i].name;
+        detail += sym->params[i].type.to_string() + " " + sym->params[i].name;
       }
       detail += ")";
       // Build snippet: name(${1:param1}, ${2:param2})
@@ -433,7 +433,7 @@ json::Value Server::handle_hover(const json::Value &params) {
     content = sym->return_type + " " + sym->name + "(";
     for (std::size_t i = 0; i < sym->params.size(); ++i) {
       if (i > 0) content += ", ";
-      content += sym->params[i].type + " " + sym->params[i].name;
+      content += sym->params[i].type.to_string() + " " + sym->params[i].name;
     }
     content += ")";
   } else if (sym->kind == SymbolKind::Struct) {

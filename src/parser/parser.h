@@ -77,13 +77,14 @@ private:
   bool is_function_declaration_start() const;
   ast::SourceLocation location_of(const Token &token) const;
   std::string token_text(const Token &token) const;
-  std::string parse_type_name();
+  ast::TypeExpr parse_type_expr();
   void synchronize();
   void error_at(const Token &token, std::string_view message);
 
   const std::vector<Token> &tokens_;
   std::size_t current_ = 0;
   std::vector<ParseError> errors_;
+  bool pending_greater_ = false;
 };
 
 } // namespace kinglet
