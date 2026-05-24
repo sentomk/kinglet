@@ -280,6 +280,10 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {
       error_at(if_stmt->location, "Condition must be Bool or Int.");
     }
+    if (const auto *lit = dynamic_cast<const ast::BoolLiteralExpr *>(if_stmt->condition.get())) {
+      warn_at(if_stmt->condition->location,
+              std::string("Condition is always ") + (lit->value ? "true" : "false") + ".");
+    }
     check_stmt(*if_stmt->then_branch, expected_return);
     if (if_stmt->else_branch) {
       check_stmt(*if_stmt->else_branch, expected_return);
@@ -291,6 +295,11 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     Type cond_type = check_expr(*while_stmt->condition);
     if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {
       error_at(while_stmt->location, "Condition must be Bool or Int.");
+    }
+    if (const auto *lit = dynamic_cast<const ast::BoolLiteralExpr *>(while_stmt->condition.get())) {
+      if (!lit->value) {
+        warn_at(while_stmt->condition->location, "Condition is always false; loop body never executes.");
+      }
     }
     ++loop_depth_;
     check_stmt(*while_stmt->body, expected_return);

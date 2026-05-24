@@ -2,10 +2,11 @@
 
 ## Next
 
-- [ ] Add CLI/golden tests for successful runs, diagnostics, bytecode dumps, and regressions
-- [ ] I/O API design: make `io::in` an input object with methods like `io::in.line(prompt)` and `io::in.secret(prompt)`
-- [ ] I/O API design: decide whether `io::in(prompt)` remains as shorthand for `io::in.line(prompt)`
-- [ ] LSP diagnostics: surface compiler warnings (unreachable code, etc.)
+- [x] Add CLI/golden tests for successful runs, diagnostics, bytecode dumps, and regressions
+- [x] I/O API design: make `io::in` an input object with methods like `io::in.line(prompt)` and `io::in.secret(prompt)`
+- [x] I/O API design: decide whether `io::in(prompt)` remains as shorthand for `io::in.line(prompt)`
+- [x] LSP diagnostics: wider underlines, document symbols, signature help
+- [x] LSP diagnostics: surface compiler warnings (unreachable code, unused vars, constant conditions)
 - [ ] Error message improvements (suggest `using io;` when `io::` used without it)
 - [ ] `using io::out;` selective import syntax
 
@@ -54,6 +55,12 @@
 - [x] LSP: `using io;` triggers `out/err/in` → `io::out` completion
 - [x] LSP: type keywords prioritized in completion
 - [x] LSP: keyword completions insert trailing space
+- [x] LSP: document symbols (outline view), signature help (parameter hints)
+- [x] LSP: wider diagnostic underlines (full token length)
+- [x] LSP: io method completion (io::out. → line, io::in. → secret)
+- [x] Golden tests: all modules (arithmetic, comparison, logic, structs, enums, inspect, generics, control flow, recursion, io methods)
+- [x] I/O: `io::out.line`, `io::err.line`, `io::in.secret` method syntax
+- [x] CI workflow with golden tests on push/PR
 - [x] VSCode extension migrated to vscode-languageclient
 - [x] VSCode file icon theme (light/dark)
 - [x] Remove `print()` builtin (replaced by `io::out`)

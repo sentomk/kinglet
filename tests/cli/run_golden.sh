@@ -104,13 +104,16 @@ run_case "inspect_basic" "run" 0 $'zero\none\nother\n' ""
 run_case "generics_basic" "run" 0 $'42\nhello\n99\nworld\n1 one\n42\n' ""
 
 # --- Control Flow ---
-run_case "control_flow" "run" 0 $'10\n3\n2\n1\nyes\n' ""
+run_case "control_flow" "run" 0 $'10\n3\n2\n1\nyes\n' $'16:6: warning: Condition is always true.\n'
 
 # --- Functions ---
 run_case "functions_recursion" "run" 0 $'720\n55\n' ""
 
 # --- IO Methods ---
 run_case "io_methods" "run" 0 $'hello world\n1 + 2 = 3\nno newline here\ndone\n' ""
+
+# --- Warnings ---
+run_case "warnings" "run" 0 "" $'4:6: warning: Condition is always true.\n8:9: warning: Condition is always false; loop body never executes.\n9:5: warning: Unused variable \'x\'.\n13:3: warning: Unreachable code.\n2:3: warning: Unused variable \'unused\'.\n'
 
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2
