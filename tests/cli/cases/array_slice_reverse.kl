@@ -1,0 +1,16 @@
+using io;
+
+int main() {
+  int[] arr = [1, 2, 3, 4, 5];
+
+  io::out.line("index_of 3: {}", arr.index_of(3));
+  io::out.line("index_of 99: {}", arr.index_of(99));
+
+  int[] sub = arr.slice(1, 4);
+  io::out.line("slice(1,4): {} {} {}", sub[0], sub[1], sub[2]);
+
+  arr.reverse();
+  io::out.line("reversed: {} {} {} {} {}", arr[0], arr[1], arr[2], arr[3], arr[4]);
+
+  return 0;
+}

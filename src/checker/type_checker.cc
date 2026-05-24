@@ -604,6 +604,35 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
           }
           return void_type();
         }
+        if (method == "index_of") {
+          if (call_expr->args.size() != 1) {
+            error_at(call_expr->location, "index_of() takes exactly 1 argument.");
+          } else {
+            check_expr(*call_expr->args[0]);
+          }
+          return int_type();
+        }
+        if (method == "slice") {
+          if (call_expr->args.size() != 2) {
+            error_at(call_expr->location, "slice() takes exactly 2 arguments (start, end).");
+          } else {
+            Type start_type = check_expr(*call_expr->args[0]);
+            Type end_type = check_expr(*call_expr->args[1]);
+            if (start_type.kind != TypeKind::Int) {
+              error_at(call_expr->args[0]->location, "slice() start must be Int.");
+            }
+            if (end_type.kind != TypeKind::Int) {
+              error_at(call_expr->args[1]->location, "slice() end must be Int.");
+            }
+          }
+          return array_type(obj_type.element_type ? *obj_type.element_type : int_type());
+        }
+        if (method == "reverse") {
+          if (!call_expr->args.empty()) {
+            error_at(call_expr->location, "reverse() takes no arguments.");
+          }
+          return void_type();
+        }
         error_at(call_expr->location, "Array has no method '" + method + "'.");
         return int_type();
       }
@@ -750,7 +779,8 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       const std::string &method = field_access->field_name;
       if (method == "len" || method == "push" || method == "pop" ||
           method == "remove" || method == "contains" || method == "clear" ||
-          method == "insert") {
+          method == "insert" || method == "index_of" || method == "slice" ||
+          method == "reverse") {
         return void_type();
       }
       error_at(field_access->location, "Array has no method '" + method + "'.");

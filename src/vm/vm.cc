@@ -619,6 +619,60 @@ VmResult Vm::run(const Chunk &chunk) {
       push(Value::null_value());
       break;
     }
+    case OpCode::ArrayIndexOf: {
+      Value needle = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot call index_of() on non-array value.");
+      }
+      int64_t found = -1;
+      for (std::size_t i = 0; i < array.array_storage->elements.size(); ++i) {
+        const auto &elem = array.array_storage->elements[i];
+        if (elem.type == needle.type) {
+          bool match = false;
+          if (elem.type == ValueType::Int && elem.int_value_storage == needle.int_value_storage) match = true;
+          if (elem.type == ValueType::String && elem.string_storage == needle.string_storage) match = true;
+          if (elem.type == ValueType::Bool && elem.bool_value_storage == needle.bool_value_storage) match = true;
+          if (elem.type == ValueType::Double && elem.double_value_storage == needle.double_value_storage) match = true;
+          if (match) { found = static_cast<int64_t>(i); break; }
+        }
+      }
+      push(Value::int_value(found));
+      break;
+    }
+    case OpCode::ArraySlice: {
+      Value end_val = pop();
+      Value start_val = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot call slice() on non-array value.");
+      }
+      if (start_val.type != ValueType::Int || end_val.type != ValueType::Int) {
+        return runtime_error("slice() arguments must be integers.");
+      }
+      auto &elems = array.array_storage->elements;
+      auto start = start_val.int_value_storage;
+      auto end = end_val.int_value_storage;
+      if (start < 0) start = 0;
+      if (end > static_cast<int64_t>(elems.size())) end = static_cast<int64_t>(elems.size());
+      if (start >= end) {
+        push(Value::array_value({}));
+        break;
+      }
+      std::vector<Value> slice_elems(elems.begin() + start, elems.begin() + end);
+      push(Value::array_value(std::move(slice_elems)));
+      break;
+    }
+    case OpCode::ArrayReverse: {
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot call reverse() on non-array value.");
+      }
+      std::reverse(array.array_storage->elements.begin(),
+                   array.array_storage->elements.end());
+      push(Value::null_value());
+      break;
+    }
     }
   }
 

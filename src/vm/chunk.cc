@@ -203,6 +203,12 @@ const char *opcode_name(OpCode op) {
     return "ArrayClear";
   case OpCode::ArrayInsert:
     return "ArrayInsert";
+  case OpCode::ArrayIndexOf:
+    return "ArrayIndexOf";
+  case OpCode::ArraySlice:
+    return "ArraySlice";
+  case OpCode::ArrayReverse:
+    return "ArrayReverse";
   }
   return "Unknown";
 }

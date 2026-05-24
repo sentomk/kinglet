@@ -278,6 +278,12 @@ json::Value Server::handle_completion(const json::Value &params) {
                   "clear()", line, character, character));
               items.push_back(protocol::snippet_item_with_edit("insert", 2, "void — insert at index",
                   "insert($1, $2)", line, character, character));
+              items.push_back(protocol::snippet_item_with_edit("index_of", 2, "int — find element position (-1 if not found)",
+                  "index_of($1)", line, character, character));
+              items.push_back(protocol::snippet_item_with_edit("slice", 2, "T[] — sub-array from start to end",
+                  "slice($1, $2)", line, character, character));
+              items.push_back(protocol::snippet_item_with_edit("reverse", 2, "void — reverse in place",
+                  "reverse()", line, character, character));
               return json::Value(items);
             }
             for (const auto *type_sym : visible_syms) {

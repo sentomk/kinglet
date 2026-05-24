@@ -55,6 +55,9 @@ enum class OpCode : uint8_t {
   ArrayContains,
   ArrayClear,
   ArrayInsert,
+  ArrayIndexOf,
+  ArraySlice,
+  ArrayReverse,
 };
 
 struct Instruction {

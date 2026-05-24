@@ -546,7 +546,8 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       const std::string &method = field_callee->field_name;
       if (method == "len" || method == "push" || method == "pop" ||
           method == "remove" || method == "contains" || method == "clear" ||
-          method == "insert") {
+          method == "insert" || method == "index_of" || method == "slice" ||
+          method == "reverse") {
         compile_expr(*field_callee->object);
         if (method == "len") {
           emit(OpCode::ArrayLen, call_expr->location);
@@ -579,6 +580,21 @@ void Compiler::compile_expr(const ast::Expr &expr) {
           compile_expr(*call_expr->args[0]);
           compile_expr(*call_expr->args[1]);
           emit(OpCode::ArrayInsert, call_expr->location);
+          return;
+        }
+        if (method == "index_of") {
+          compile_expr(*call_expr->args[0]);
+          emit(OpCode::ArrayIndexOf, call_expr->location);
+          return;
+        }
+        if (method == "slice") {
+          compile_expr(*call_expr->args[0]);
+          compile_expr(*call_expr->args[1]);
+          emit(OpCode::ArraySlice, call_expr->location);
+          return;
+        }
+        if (method == "reverse") {
+          emit(OpCode::ArrayReverse, call_expr->location);
           return;
         }
       }
