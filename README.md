@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-<p align="center">A bytecode-compiled language implementing the C++ proposals that deserved to ship.</p>
+<p align="center">A bytecode-compiled language exploring the C++ proposals that deserved a second life.</p>
 
 <p align="center">
   <a href="https://github.com/sentomk/kinglet/releases"><img src="https://img.shields.io/github/v/tag/sentomk/kinglet?label=version&sort=semver" alt="Version"></a>
@@ -15,7 +15,7 @@
 </p>
 
 > [!NOTE]
-> Familiar semantics. Curated features from WG21 proposals that were deferred or rejected. A VM small enough to embed anywhere.
+> Familiar semantics. Curated ideas from WG21 proposals that were deferred or rejected. Kinglet is proposal-inspired, not proposal-compatible: it adapts syntax and semantics when that makes the language smaller, clearer, or more coherent.
 
 ## Install
 
@@ -119,12 +119,22 @@ if x > 0 { ... } else { ... }
 while count > 0 { ... }
 for (int i = 0; i < 10; i = i + 1) { ... }
 
-// Pattern matching
+// Pattern matching (currently literal patterns plus wildcard)
 string r = inspect value {
   0 => "zero",
   1 => "one",
   _ => "other",
 };
+
+// Planned: structural matching with guard-only arms and reflected fields.
+// Planned shape:
+// string q = inspect point {
+//   Point(.x == .y) => "diagonal",
+//   Point(.x == 0) => "on y-axis",
+//   Point(.y == 0) => "on x-axis",
+//   $[point.x > 0 && point.y > 0] => "quadrant I",
+//   _ => "somewhere else",
+// };
 
 // I/O
 using io;
