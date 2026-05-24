@@ -79,6 +79,15 @@ jobs:
         with:
           node-version: 20
 
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Update package.json version
+        working-directory: editors/vscode
+        run: npm version "$VERSION" --no-git-tag-version
+
       - name: Install dependencies
         working-directory: editors/vscode
         run: npm install
@@ -97,15 +106,29 @@ jobs:
     needs: [build, package-vsix]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      - name: Resolve changelog
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          CHANGELOG="docs/changelog/v${VERSION}.md"
+          if [ -f "$CHANGELOG" ]; then
+            echo "body_path=$CHANGELOG" >> $GITHUB_OUTPUT
+          else
+            echo "body_path=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: ${{ steps.changelog.outputs.body_path || '' }}
+          generate_release_notes: ${{ steps.changelog.outputs.body_path == '' }}
           files: |
             artifacts/kinglet-windows-x64/*.tar.gz
             artifacts/kinglet-linux-x64/*.tar.gz

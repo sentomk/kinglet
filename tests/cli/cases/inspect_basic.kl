@@ -1,0 +1,16 @@
+using io;
+
+string describe(int x) {
+  return inspect x {
+    0 => "zero",
+    1 => "one",
+    _ => "other",
+  };
+}
+
+int main() {
+  io::out("{}\n", describe(0));
+  io::out("{}\n", describe(1));
+  io::out("{}\n", describe(42));
+  return 0;
+}

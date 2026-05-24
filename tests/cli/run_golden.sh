@@ -33,6 +33,9 @@ run_case() {
   fi
   local actual_exit=$?
 
+  # Normalize CRLF to LF for cross-platform compatibility
+  sed -i 's/\r$//' "$stdout" "$stderr"
+
   if [[ "$actual_exit" -ne "$expected_exit" ]]; then
     fail "$name exit: expected $expected_exit, got $actual_exit"
   fi
@@ -58,6 +61,7 @@ run_contains_case() {
 
   "$KINGLET" "$mode" "$source" >"$stdout" 2>"$stderr"
   local actual_exit=$?
+  sed -i 's/\r$//' "$stdout" "$stderr"
   if [[ "$actual_exit" -ne 0 ]]; then
     fail "$name exit: expected 0, got $actual_exit"
   fi
@@ -76,10 +80,34 @@ run_contains_case() {
 cd "$ROOT" || exit 1
 ninja -C out/Debug >/dev/null
 
+# --- Arrays ---
 run_case "arrays_success" "run" 0 $'1 20 []\n' ""
 run_case "arrays_type_error" "run" 65 "" $'2:18: error: Array elements must have compatible types.\n'
 run_case "arrays_oob" "run" 70 "" $'runtime error: Array index out of bounds.\n'
 run_contains_case "arrays_bytecode" "--bytecode" "ArrayNew" "IndexGet" "IndexSet"
+
+# --- Operators ---
+run_case "operators_arithmetic" "run" 0 $'13\n7\n30\n3\n1\n-5\n-6\n' ""
+run_case "operators_comparison" "run" 0 $'true\ntrue\ntrue\ntrue\ntrue\nfalse\n' ""
+run_case "operators_logic" "run" 0 $'true\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\nshort-circuit:\ndone\n' ""
+
+# --- Structs ---
+run_case "structs_basic" "run" 0 $'3 4\n10\n' ""
+
+# --- Enums ---
+run_case "enums_basic" "run" 0 $'green\nnot red\n' ""
+
+# --- Inspect ---
+run_case "inspect_basic" "run" 0 $'zero\none\nother\n' ""
+
+# --- Generics ---
+run_case "generics_basic" "run" 0 $'42\nhello\n99\nworld\n1 one\n42\n' ""
+
+# --- Control Flow ---
+run_case "control_flow" "run" 0 $'10\n3\n2\n1\nyes\n' ""
+
+# --- Functions ---
+run_case "functions_recursion" "run" 0 $'720\n55\n' ""
 
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2

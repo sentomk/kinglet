@@ -1,0 +1,14 @@
+using io;
+
+struct Point {
+  int x;
+  int y;
+}
+
+int main() {
+  Point p { 3, 4 };
+  io::out("{} {}\n", p.x, p.y);
+  p.x = 10;
+  io::out("{}\n", p.x);
+  return 0;
+}

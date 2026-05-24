@@ -1,0 +1,11 @@
+using io;
+
+int main() {
+  io::out("{}\n", 1 == 1);
+  io::out("{}\n", 1 != 2);
+  io::out("{}\n", 1 < 2);
+  io::out("{}\n", 2 > 1);
+  io::out("{}\n", 1 <= 1);
+  io::out("{}\n", 1 >= 2);
+  return 0;
+}

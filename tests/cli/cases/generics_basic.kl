@@ -1,0 +1,28 @@
+using io;
+
+struct Box<T> {
+  T value;
+}
+
+struct Pair<A, B> {
+  A first;
+  B second;
+}
+
+T identity<T>(T x) => x;
+
+int main() {
+  Box<int> bi { 42 };
+  Box<string> bs { "hello" };
+  io::out("{}\n", bi.value);
+  io::out("{}\n", bs.value);
+  io::out("{}\n", identity<int>(99));
+  io::out("{}\n", identity<string>("world"));
+
+  Pair<int, string> p { 1, "one" };
+  io::out("{} {}\n", p.first, p.second);
+
+  Box<Box<int>> nested { bi };
+  io::out("{}\n", nested.value.value);
+  return 0;
+}

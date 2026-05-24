@@ -1,0 +1,12 @@
+using io;
+
+int main() {
+  io::out("{}\n", 10 + 3);
+  io::out("{}\n", 10 - 3);
+  io::out("{}\n", 10 * 3);
+  io::out("{}\n", 10 / 3);
+  io::out("{}\n", 10 % 3);
+  io::out("{}\n", -5);
+  io::out("{}\n", ~5);
+  return 0;
+}

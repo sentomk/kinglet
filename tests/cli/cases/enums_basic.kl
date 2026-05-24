@@ -1,0 +1,18 @@
+using io;
+
+enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+int main() {
+  Color c = Color::Green;
+  if c == Color::Green {
+    io::out("green\n");
+  }
+  if c != Color::Red {
+    io::out("not red\n");
+  }
+  return 0;
+}
