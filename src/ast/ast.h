@@ -45,6 +45,7 @@ const char *assign_op_name(AssignOp op);
 struct SourceLocation {
   int line = 0;
   int column = 0;
+  int length = 1;
 };
 
 struct Node {

@@ -870,6 +870,7 @@ ast::SourceLocation Parser::location_of(const Token &token) const {
   return ast::SourceLocation{
       .line = token.line,
       .column = token.column,
+      .length = static_cast<int>(token.lexeme.size()),
   };
 }
 

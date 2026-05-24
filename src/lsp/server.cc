@@ -49,6 +49,10 @@ void Server::handle_message(const json::Value &msg) {
     send_response(id, handle_definition(params));
   } else if (method == "textDocument/hover") {
     send_response(id, handle_hover(params));
+  } else if (method == "textDocument/documentSymbol") {
+    send_response(id, handle_document_symbol(params));
+  } else if (method == "textDocument/signatureHelp") {
+    send_response(id, handle_signature_help(params));
 // PLACEHOLDER_SERVER_CONTINUE
   } else if (method == "shutdown") {
     send_response(id, json::Value::null());
@@ -90,6 +94,14 @@ json::Value Server::handle_initialize(const json::Value &) {
 
   capabilities["definitionProvider"] = json::Value(true);
   capabilities["hoverProvider"] = json::Value(true);
+  capabilities["documentSymbolProvider"] = json::Value(true);
+
+  json::Object sig_help;
+  json::Array sig_trigger_chars;
+  sig_trigger_chars.push_back(json::Value::string("("));
+  sig_trigger_chars.push_back(json::Value::string(","));
+  sig_help["triggerCharacters"] = json::Value(sig_trigger_chars);
+  capabilities["signatureHelpProvider"] = json::Value(sig_help);
 
   json::Object server_info;
   server_info["name"] = json::Value::string("kinglet");
@@ -157,7 +169,7 @@ void Server::publish_diagnostics(Document &doc) {
   ensure_analyzed(doc);
   json::Array items;
   for (const auto &diag : doc.analysis.diagnostics) {
-    items.push_back(protocol::diagnostic(diag.line, diag.col, diag.message, diag.severity));
+    items.push_back(protocol::diagnostic(diag.line, diag.col, diag.message, diag.severity, diag.length));
   }
   json::Object diag_params;
   diag_params["uri"] = json::Value::string(doc.uri);
@@ -218,7 +230,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
-  // Check for . (dot) completion — offer struct fields
+  // Check for . (dot) completion — offer struct fields or io methods
   if (character >= 1) {
     int dot_pos = character - 1;
     if (dot_pos < static_cast<int>(line_text.size()) &&
@@ -226,8 +238,25 @@ json::Value Server::handle_completion(const json::Value &params) {
       int end = dot_pos;
       int start = end;
       while (start > 0 && (std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(start - 1)])) ||
-             line_text[static_cast<std::size_t>(start - 1)] == '_'))
+             line_text[static_cast<std::size_t>(start - 1)] == '_' ||
+             line_text[static_cast<std::size_t>(start - 1)] == ':'))
         --start;
+      std::string before_dot = line_text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
+
+      if ((before_dot == "io::out" || before_dot == "io::err") &&
+          (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
+        items.push_back(protocol::snippet_item_with_edit("line", 3, "print with newline",
+            "line($1)", line, character, character));
+        return json::Value(items);
+      }
+      if (before_dot == "io::in" &&
+          (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
+        items.push_back(protocol::snippet_item_with_edit("secret", 3, "read without echo",
+            "secret($1)", line, character, character));
+        return json::Value(items);
+      }
+
+      // Regular struct field completion
       if (start < end) {
         std::string var_name = line_text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
         auto visible_syms = doc->analysis.symbols.visible_at(line + 1);
@@ -397,6 +426,145 @@ json::Value Server::handle_completion(const json::Value &params) {
   std::cerr << "[LSP] completion: " << items.size() << " items, prefix='" << prefix << "'" << std::endl;
   return json::Value(items);
 }
+
+json::Value Server::handle_document_symbol(const json::Value &params) {
+  json::Array symbols;
+  std::string uri = uri_from_params(params);
+  auto *doc = store_.get(uri);
+  if (!doc) return json::Value(symbols);
+
+  ensure_analyzed(*doc);
+
+  for (const auto &sym : doc->analysis.symbols.symbols) {
+    json::Object item;
+    item["name"] = json::Value::string(sym.name);
+
+    int kind = 13; // Variable
+    switch (sym.kind) {
+    case SymbolKind::Function:
+      kind = 12;
+      break;
+    case SymbolKind::Struct:
+      kind = 23;
+      break;
+    case SymbolKind::Enum:
+      kind = 10;
+      break;
+    case SymbolKind::Variable:
+    case SymbolKind::Parameter:
+      kind = 13;
+      break;
+    case SymbolKind::Namespace:
+      kind = 3;
+      break;
+    }
+    item["kind"] = json::Value::number(kind);
+
+    int line = sym.location.line > 0 ? sym.location.line - 1 : 0;
+    int col = sym.location.column > 0 ? sym.location.column - 1 : 0;
+    json::Object range;
+    range["start"] = protocol::position(line, col);
+    range["end"] = protocol::position(line, col + static_cast<int>(sym.name.size()));
+    item["range"] = json::Value(range);
+    item["selectionRange"] = json::Value(range);
+
+    // Only include top-level symbols (functions, structs, enums)
+    if (sym.kind == SymbolKind::Function || sym.kind == SymbolKind::Struct ||
+        sym.kind == SymbolKind::Enum) {
+      symbols.push_back(json::Value(item));
+    }
+  }
+
+  return json::Value(symbols);
+}
+
+json::Value Server::handle_signature_help(const json::Value &params) {
+  std::string uri = uri_from_params(params);
+  auto [line, character] = position_from_params(params);
+  auto *doc = store_.get(uri);
+  if (!doc) return json::Value(json::Object{});
+
+  ensure_analyzed(*doc);
+
+  // Split text into lines
+  std::vector<std::string> lines;
+  std::string current;
+  for (char c : doc->text) {
+    if (c == '\n') {
+      lines.push_back(current);
+      current.clear();
+    } else if (c != '\r') {
+      current += c;
+    }
+  }
+  lines.push_back(current);
+
+  if (line < 0 || line >= static_cast<int>(lines.size())) return json::Value(json::Object{});
+  const std::string &line_text = lines[static_cast<std::size_t>(line)];
+
+  // Walk backwards from cursor to find the function name and count commas for active parameter
+  int paren_depth = 0;
+  int active_param = 0;
+  int func_end = -1;
+  for (int i = character - 1; i >= 0; --i) {
+    char c = line_text[static_cast<std::size_t>(i)];
+    if (c == ')') ++paren_depth;
+    else if (c == '(') {
+      if (paren_depth == 0) {
+        func_end = i;
+        break;
+      }
+      --paren_depth;
+    } else if (c == ',' && paren_depth == 0) {
+      ++active_param;
+    }
+  }
+  if (func_end < 0) return json::Value(json::Object{});
+
+  // Extract function name (walk back past whitespace and identifier chars)
+  int name_end = func_end;
+  int name_start = name_end;
+  while (name_start > 0 && (std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(name_start - 1)])) ||
+         line_text[static_cast<std::size_t>(name_start - 1)] == '_'))
+    --name_start;
+  std::string func_name = line_text.substr(static_cast<std::size_t>(name_start), static_cast<std::size_t>(name_end - name_start));
+  if (func_name.empty()) return json::Value(json::Object{});
+
+  // Look up the function in the symbol table
+  auto visible = doc->analysis.symbols.visible_at(line + 1);
+  for (const auto *sym : visible) {
+    if (sym->kind == SymbolKind::Function && sym->name == func_name) {
+      // Build signature
+      std::string sig = sym->return_type + " " + sym->name + "(";
+      json::Array param_infos;
+      for (std::size_t i = 0; i < sym->params.size(); ++i) {
+        std::string param_str = sym->params[i].type.to_string() + " " + sym->params[i].name;
+        if (i > 0) sig += ", ";
+        sig += param_str;
+        json::Object pi;
+        pi["label"] = json::Value::string(param_str);
+        param_infos.push_back(json::Value(pi));
+      }
+      sig += ")";
+
+      json::Object sig_info;
+      sig_info["label"] = json::Value::string(sig);
+      sig_info["parameters"] = json::Value(param_infos);
+
+      json::Array signatures;
+      signatures.push_back(json::Value(sig_info));
+
+      json::Object result;
+      result["signatures"] = json::Value(signatures);
+      result["activeSignature"] = json::Value::number(0);
+      result["activeParameter"] = json::Value::number(active_param);
+      return json::Value(result);
+    }
+  }
+
+  return json::Value(json::Object{});
+}
+
 // PLACEHOLDER_DEF_HOVER
 
 json::Value Server::handle_definition(const json::Value &params) {

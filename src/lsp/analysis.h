@@ -39,6 +39,7 @@ struct SymbolTable {
 struct Diagnostic {
   int line;
   int col;
+  int length = 1;
   std::string message;
   int severity; // 1=Error, 2=Warning, 3=Info, 4=Hint
 };

@@ -137,7 +137,7 @@ AnalysisResult analyze(const std::string &source) {
   bool has_lexer_error = false;
   for (const auto &token : tokens) {
     if (token.type == TokenType::ERROR) {
-      result.diagnostics.push_back({token.line, token.column, std::string(token.lexeme), 1});
+      result.diagnostics.push_back({token.line, token.column, static_cast<int>(token.lexeme.size()), std::string(token.lexeme), 1});
       has_lexer_error = true;
     }
   }
@@ -148,7 +148,7 @@ AnalysisResult analyze(const std::string &source) {
   auto parse_result = parser.parse();
 
   for (const auto &err : parse_result.errors) {
-    result.diagnostics.push_back({err.line, err.column, err.message, 1});
+    result.diagnostics.push_back({err.line, err.column, 1, err.message, 1});
   }
 
   // Collect using declarations even with parse errors (for completion)
@@ -175,7 +175,7 @@ AnalysisResult analyze(const std::string &source) {
   TypeChecker checker;
   auto type_result = checker.check(*parse_result.program);
   for (const auto &err : type_result.errors) {
-    result.diagnostics.push_back({err.location.line, err.location.column, err.message, static_cast<int>(err.severity)});
+    result.diagnostics.push_back({err.location.line, err.location.column, err.location.length, err.message, static_cast<int>(err.severity)});
   }
 
   SymbolCollector collector;

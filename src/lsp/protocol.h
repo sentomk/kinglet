@@ -20,9 +20,9 @@ inline json::Value range(int start_line, int start_char, int end_line, int end_c
   return json::Value(r);
 }
 
-inline json::Value diagnostic(int line, int col, const std::string &message, int severity = 1) {
+inline json::Value diagnostic(int line, int col, const std::string &message, int severity = 1, int length = 1) {
   json::Object item;
-  item["range"] = range(line - 1, col - 1, line - 1, col);
+  item["range"] = range(line - 1, col - 1, line - 1, col - 1 + length);
   item["message"] = json::Value::string(message);
   item["severity"] = json::Value::number(severity);
   item["source"] = json::Value::string("kinglet");

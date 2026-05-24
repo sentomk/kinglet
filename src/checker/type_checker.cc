@@ -649,6 +649,19 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
   }
 
   if (const auto *field_access = dynamic_cast<const ast::FieldAccessExpr *>(&expr)) {
+    // Handle io::out.line, io::err.line, io::in.secret as callable methods
+    const auto *ns_obj =
+        dynamic_cast<const ast::NamespaceAccessExpr *>(field_access->object.get());
+    if (ns_obj && ns_obj->namespace_name == "io" && used_.count("io") != 0) {
+      if ((ns_obj->member_name == "out" || ns_obj->member_name == "err") &&
+          field_access->field_name == "line") {
+        return void_type();
+      }
+      if (ns_obj->member_name == "in" && field_access->field_name == "secret") {
+        return string_type();
+      }
+    }
+
     Type obj_type = check_expr(*field_access->object);
     if (obj_type.kind != TypeKind::Struct) {
       error_at(field_access->location, "Cannot access field on non-struct type.");
