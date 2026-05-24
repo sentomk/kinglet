@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GN
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-arm64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          else
+            curl -Lo gn.zip "https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest"
+            unzip gn.zip -d "$HOME/bin"
+            echo "$HOME/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Generate build files
+        shell: bash
+        run: gn gen out/Debug
+
+      - name: Build
+        shell: bash
+        run: ninja -C out/Debug
+
+      - name: Run golden tests
+        shell: bash
+        run: bash tests/cli/run_golden.sh
