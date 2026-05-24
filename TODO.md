@@ -11,10 +11,13 @@
 
 ## P2: Types & Patterns
 
-- [ ] struct definitions
-- [ ] enum definitions
-- [ ] Exhaustiveness checking for inspect
-- [ ] Full pattern matching (destructuring, guards)
+- [ ] Dynamic arrays: `T[]`, array literals, indexing, assignment, and bounds checks
+- [ ] Align pattern matching syntax with WG21 P2688R5's `match` expression model
+- [ ] Decide whether `inspect` remains as an alias or migrates fully to `match`
+- [ ] Pattern guards using `if (...)`
+- [ ] Explicit binding with `let`
+- [ ] Structured binding patterns for structs, tuples, and arrays
+- [ ] Exhaustiveness and usefulness checking for pattern matching
 - [ ] NaN-boxing migration (optional)
 
 ## P3: Stdlib & Toolchain
@@ -31,11 +34,13 @@
 ## Known Gaps
 
 - [ ] Closures / lambda
-- [ ] Array/Map literals
+- [ ] Map literals
 - [ ] Consider visitor pattern for `dynamic_cast` dispatch
 
 ## Done
 
+- [x] Struct definitions
+- [x] Enum definitions
 - [x] Operators: `%` (modulo), `&&`/`||` (short-circuit), `~` (bitwise NOT)
 - [x] Generics `<T>` (monomorphization: structs + functions)
 - [x] TypeChecker: report unknown type names (no longer silently treated as `int`)

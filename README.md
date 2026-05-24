@@ -126,14 +126,13 @@ string r = inspect value {
   _ => "other",
 };
 
-// Planned: structural matching with guard-only arms and reflected fields.
+// Direction: align with WG21 P2688R5's match expression model.
 // Planned shape:
-// string q = inspect point {
-//   Point(.x == .y) => "diagonal",
-//   Point(.x == 0) => "on y-axis",
-//   Point(.y == 0) => "on x-axis",
-//   $[point.x > 0 && point.y > 0] => "quadrant I",
-//   _ => "somewhere else",
+// string q = point match {
+//   Point(.x, .y) if (x == y) => "diagonal";
+//   Point(.x, 0) => "on x-axis";
+//   Point(0, .y) => "on y-axis";
+//   _ => "somewhere else";
 // };
 
 // I/O
