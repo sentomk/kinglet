@@ -118,6 +118,9 @@ run_case "warnings" "run" 0 "" $'4:6: warning: Condition is always true.\n8:9: w
 # --- Array Methods ---
 run_case "array_methods" "run" 0 $'len: 5\nafter push: len = 6\npopped: 6\nremoved at 0: 1\ncontains 3: true\ncontains 99: false\nafter clear: len = 0\n' ""
 
+# --- Chained Comparisons ---
+run_case "chained_comparisons" "run" 0 $'in rangenot smalledge' ""
+
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2
   exit 1

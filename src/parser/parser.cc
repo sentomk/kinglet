@@ -467,14 +467,42 @@ ast::ExprPtr Parser::equality() {
 
 ast::ExprPtr Parser::comparison() {
   ast::ExprPtr expr = term();
-  while (match_any({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER,
-                    TokenType::GREATER_EQUAL})) {
-    const Token &op = previous();
-    ast::ExprPtr right = term();
-    expr = std::make_unique<ast::BinaryExpr>(location_of(op), std::move(expr),
-                                             token_to_binary_op(op.type), std::move(right));
+
+  auto is_comparison_op = [this]() {
+    return check(TokenType::LESS) || check(TokenType::LESS_EQUAL) ||
+           check(TokenType::GREATER) || check(TokenType::GREATER_EQUAL);
+  };
+
+  if (!is_comparison_op()) {
+    return expr;
   }
-  return expr;
+
+  advance();
+  auto op1_loc = location_of(previous());
+  ast::BinaryOp bin_op1 = token_to_binary_op(previous().type);
+
+  std::size_t mid_start = current_;
+  ast::ExprPtr mid = term();
+
+  if (!is_comparison_op()) {
+    return std::make_unique<ast::BinaryExpr>(op1_loc, std::move(expr), bin_op1, std::move(mid));
+  }
+
+  std::size_t saved = current_;
+  current_ = mid_start;
+  ast::ExprPtr mid_copy = term();
+  current_ = saved;
+
+  ast::ExprPtr left_cmp = std::make_unique<ast::BinaryExpr>(op1_loc, std::move(expr), bin_op1, std::move(mid));
+
+  advance();
+  auto op2_loc = location_of(previous());
+  ast::BinaryOp bin_op2 = token_to_binary_op(previous().type);
+  ast::ExprPtr right_term = term();
+
+  ast::ExprPtr right_cmp = std::make_unique<ast::BinaryExpr>(op2_loc, std::move(mid_copy), bin_op2, std::move(right_term));
+
+  return std::make_unique<ast::BinaryExpr>(op1_loc, std::move(left_cmp), ast::BinaryOp::And, std::move(right_cmp));
 }
 
 ast::ExprPtr Parser::term() {
