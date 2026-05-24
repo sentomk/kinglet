@@ -97,6 +97,7 @@ VmResult Vm::run(const Chunk &chunk) {
       case ValueType::Function:
       case ValueType::Struct:
       case ValueType::Enum:
+      case ValueType::Array:
         truthy = true;
         break;
       }
@@ -195,6 +196,7 @@ VmResult Vm::run(const Chunk &chunk) {
       case ValueType::Function:
       case ValueType::Struct:
       case ValueType::Enum:
+      case ValueType::Array:
         truthy = true;
         break;
       }
@@ -223,6 +225,8 @@ VmResult Vm::run(const Chunk &chunk) {
                    left.enum_variant_index == right.enum_variant_index;
         } else if (left.type == ValueType::String) {
           result = left.string_storage == right.string_storage;
+        } else if (left.type == ValueType::Array) {
+          result = left.array_storage == right.array_storage;
         } else {
           result = left.int_value_storage == right.int_value_storage &&
                    left.double_value_storage == right.double_value_storage &&
@@ -236,6 +240,8 @@ VmResult Vm::run(const Chunk &chunk) {
                    left.enum_variant_index != right.enum_variant_index;
         } else if (left.type == ValueType::String) {
           result = left.string_storage != right.string_storage;
+        } else if (left.type == ValueType::Array) {
+          result = left.array_storage != right.array_storage;
         } else {
           result = !(left.int_value_storage == right.int_value_storage &&
                      left.double_value_storage == right.double_value_storage &&
@@ -431,6 +437,58 @@ VmResult Vm::run(const Chunk &chunk) {
       int type_idx = instruction.operand >> 16;
       int variant_idx = instruction.operand & 0xFFFF;
       push(Value::enum_value(type_idx, variant_idx));
+      break;
+    }
+    case OpCode::ArrayNew: {
+      const uint32_t element_count = static_cast<uint32_t>(instruction.operand);
+      if (stack_.size() < element_count) {
+        return runtime_error("Stack underflow for array creation.");
+      }
+      std::vector<Value> elements(element_count);
+      for (uint32_t i = 0; i < element_count; ++i) {
+        elements[element_count - 1 - i] = pop();
+      }
+      push(Value::array_value(std::move(elements)));
+      break;
+    }
+    case OpCode::IndexGet: {
+      if (stack_.size() < 2) {
+        return runtime_error("Stack underflow for array indexing.");
+      }
+      Value index = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot index non-array value.");
+      }
+      if (index.type != ValueType::Int) {
+        return runtime_error("Array index must be an integer.");
+      }
+      if (index.int_value_storage < 0 ||
+          static_cast<std::size_t>(index.int_value_storage) >= array.array_storage->elements.size()) {
+        return runtime_error("Array index out of bounds.");
+      }
+      push(array.array_storage->elements[static_cast<std::size_t>(index.int_value_storage)]);
+      break;
+    }
+    case OpCode::IndexSet: {
+      if (stack_.size() < 3) {
+        return runtime_error("Stack underflow for array assignment.");
+      }
+      Value value = pop();
+      Value index = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot assign indexed value on non-array value.");
+      }
+      if (index.type != ValueType::Int) {
+        return runtime_error("Array index must be an integer.");
+      }
+      if (index.int_value_storage < 0 ||
+          static_cast<std::size_t>(index.int_value_storage) >= array.array_storage->elements.size()) {
+        return runtime_error("Array index out of bounds.");
+      }
+      array.array_storage->elements[static_cast<std::size_t>(index.int_value_storage)] = value;
+      push(value);
       break;
     }
     }

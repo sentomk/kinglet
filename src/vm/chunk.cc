@@ -98,6 +98,8 @@ void Chunk::disassemble(std::ostream &out) const {
       out << " argc=" << instruction.operand;
     } else if (instruction.op == OpCode::NativeIn) {
       out << " argc=" << instruction.operand;
+    } else if (instruction.op == OpCode::ArrayNew) {
+      out << " count=" << instruction.operand;
     }
     out << '\n';
   }
@@ -121,10 +123,14 @@ const char *opcode_name(OpCode op) {
     return "Multiply";
   case OpCode::Divide:
     return "Divide";
+  case OpCode::Modulo:
+    return "Modulo";
   case OpCode::Negate:
     return "Negate";
   case OpCode::Not:
     return "Not";
+  case OpCode::BitNot:
+    return "BitNot";
   case OpCode::LoadLocal:
     return "LoadLocal";
   case OpCode::StoreLocal:
@@ -165,6 +171,12 @@ const char *opcode_name(OpCode op) {
     return "FieldSet";
   case OpCode::EnumVariant:
     return "EnumVariant";
+  case OpCode::ArrayNew:
+    return "ArrayNew";
+  case OpCode::IndexGet:
+    return "IndexGet";
+  case OpCode::IndexSet:
+    return "IndexSet";
   }
   return "Unknown";
 }

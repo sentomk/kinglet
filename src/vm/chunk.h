@@ -42,6 +42,9 @@ enum class OpCode : uint8_t {
   FieldGet,
   FieldSet,
   EnumVariant,
+  ArrayNew,
+  IndexGet,
+  IndexSet,
 };
 
 struct Instruction {

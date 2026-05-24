@@ -667,6 +667,30 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     return;
   }
 
+  if (const auto *array_lit = dynamic_cast<const ast::ArrayLiteralExpr *>(&expr)) {
+    for (const ast::ExprPtr &element : array_lit->elements) {
+      compile_expr(*element);
+    }
+    emit_operand(OpCode::ArrayNew, static_cast<uint32_t>(array_lit->elements.size()),
+                 array_lit->location);
+    return;
+  }
+
+  if (const auto *index_expr = dynamic_cast<const ast::IndexExpr *>(&expr)) {
+    compile_expr(*index_expr->object);
+    compile_expr(*index_expr->index);
+    emit(OpCode::IndexGet, index_expr->location);
+    return;
+  }
+
+  if (const auto *index_assign = dynamic_cast<const ast::IndexAssignExpr *>(&expr)) {
+    compile_expr(*index_assign->object);
+    compile_expr(*index_assign->index);
+    compile_expr(*index_assign->value);
+    emit(OpCode::IndexSet, index_assign->location);
+    return;
+  }
+
   error_at(expr.location, "Unsupported expression in VM compiler.");
 }
 

@@ -56,6 +56,13 @@ Value Value::enum_value(int type_index, int variant_index) {
   return result;
 }
 
+Value Value::array_value(std::vector<Value> elements) {
+  Value result;
+  result.type = ValueType::Array;
+  result.array_storage = std::make_shared<ArrayData>(ArrayData{std::move(elements)});
+  return result;
+}
+
 bool Value::is_number() const {
   return type == ValueType::Int || type == ValueType::Double;
 }
@@ -92,6 +99,18 @@ std::ostream &operator<<(std::ostream &out, const Value &value) {
     break;
   case ValueType::Enum:
     out << "<enum:" << value.enum_type_index << ":" << value.enum_variant_index << ">";
+    break;
+  case ValueType::Array:
+    out << "[";
+    if (value.array_storage) {
+      for (std::size_t i = 0; i < value.array_storage->elements.size(); ++i) {
+        if (i > 0) {
+          out << ", ";
+        }
+        out << value.array_storage->elements[i];
+      }
+    }
+    out << "]";
     break;
   }
   return out;
