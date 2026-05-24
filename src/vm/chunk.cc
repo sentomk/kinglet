@@ -201,6 +201,8 @@ const char *opcode_name(OpCode op) {
     return "ArrayContains";
   case OpCode::ArrayClear:
     return "ArrayClear";
+  case OpCode::ArrayInsert:
+    return "ArrayInsert";
   }
   return "Unknown";
 }

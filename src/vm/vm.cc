@@ -594,6 +594,31 @@ VmResult Vm::run(const Chunk &chunk) {
       push(Value::null_value());
       break;
     }
+    case OpCode::ArrayInsert: {
+      Value value = pop();
+      Value index = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot call insert() on non-array value.");
+      }
+      if (index.type != ValueType::Int) {
+        return runtime_error("insert() index must be an integer.");
+      }
+      auto idx = index.int_value_storage;
+      auto &elems = array.array_storage->elements;
+      if (idx < 0 || static_cast<std::size_t>(idx) > elems.size()) {
+        return runtime_error("insert() index out of bounds.");
+      }
+      if (value.type == ValueType::Array && value.array_storage) {
+        elems.insert(elems.begin() + idx,
+                     value.array_storage->elements.begin(),
+                     value.array_storage->elements.end());
+      } else {
+        elems.insert(elems.begin() + idx, value);
+      }
+      push(Value::null_value());
+      break;
+    }
     }
   }
 

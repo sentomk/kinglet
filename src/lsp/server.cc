@@ -276,6 +276,8 @@ json::Value Server::handle_completion(const json::Value &params) {
                   "contains($1)", line, character, character));
               items.push_back(protocol::snippet_item_with_edit("clear", 2, "void — remove all elements",
                   "clear()", line, character, character));
+              items.push_back(protocol::snippet_item_with_edit("insert", 2, "void — insert at index",
+                  "insert($1, $2)", line, character, character));
               return json::Value(items);
             }
             for (const auto *type_sym : visible_syms) {

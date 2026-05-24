@@ -117,6 +117,7 @@ run_case "warnings" "run" 0 "" $'4:6: warning: Condition is always true.\n8:9: w
 
 # --- Array Methods ---
 run_case "array_methods" "run" 0 $'len: 5\nafter push: len = 6\npopped: 6\nremoved at 0: 1\ncontains 3: true\ncontains 99: false\nafter clear: len = 0\n' ""
+run_case "array_insert" "run" 0 $'1  10 2\nlen = 7\n7 8 9\n' ""
 
 # --- Chained Comparisons ---
 run_case "chained_comparisons" "run" 0 $'in rangenot smalledge' ""

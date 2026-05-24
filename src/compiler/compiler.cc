@@ -545,7 +545,8 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     if (field_callee) {
       const std::string &method = field_callee->field_name;
       if (method == "len" || method == "push" || method == "pop" ||
-          method == "remove" || method == "contains" || method == "clear") {
+          method == "remove" || method == "contains" || method == "clear" ||
+          method == "insert") {
         compile_expr(*field_callee->object);
         if (method == "len") {
           emit(OpCode::ArrayLen, call_expr->location);
@@ -572,6 +573,12 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         }
         if (method == "clear") {
           emit(OpCode::ArrayClear, call_expr->location);
+          return;
+        }
+        if (method == "insert") {
+          compile_expr(*call_expr->args[0]);
+          compile_expr(*call_expr->args[1]);
+          emit(OpCode::ArrayInsert, call_expr->location);
           return;
         }
       }

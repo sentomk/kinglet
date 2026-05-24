@@ -592,6 +592,18 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
           }
           return void_type();
         }
+        if (method == "insert") {
+          if (call_expr->args.size() != 2) {
+            error_at(call_expr->location, "insert() takes exactly 2 arguments (index, value).");
+          } else {
+            Type idx_type = check_expr(*call_expr->args[0]);
+            if (idx_type.kind != TypeKind::Int) {
+              error_at(call_expr->args[0]->location, "insert() index must be Int.");
+            }
+            check_expr(*call_expr->args[1]);
+          }
+          return void_type();
+        }
         error_at(call_expr->location, "Array has no method '" + method + "'.");
         return int_type();
       }
@@ -737,7 +749,8 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     if (obj_type.kind == TypeKind::Array) {
       const std::string &method = field_access->field_name;
       if (method == "len" || method == "push" || method == "pop" ||
-          method == "remove" || method == "contains" || method == "clear") {
+          method == "remove" || method == "contains" || method == "clear" ||
+          method == "insert") {
         return void_type();
       }
       error_at(field_access->location, "Array has no method '" + method + "'.");
