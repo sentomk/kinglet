@@ -14,11 +14,10 @@
 - [x] Array methods: `len()`, `push()`, `pop()`, `remove()`, `contains()`, `clear()`
 - [x] Chained comparisons (P0893): `1 <= x <= 10` → parser desugars to `&&`
 - [x] Pipeline operator (P2011): `data |> filter |> map |> sum`
-- [ ] Implicit return (P0927): last expression in block is the return value
+- [x] Implicit return (P0927): last expression in block is the return value
 - [ ] Multi-dimensional subscript (P2169): `matrix[i, j]`
-- [ ] Structured unpacking (P1858): `let [a, b, ...rest] = arr;`
-- [ ] `using io::out;` selective import syntax
-- [ ] `guard` early-exit: `guard x > 0 else { return -1; }` — compiler enforces else must terminate
+- [x] Structured unpacking (P1858): `let [a, b, ...rest] = arr;`
+- [x] `guard` early-exit: `guard x > 0 else { return -1; }` — compiler enforces else must terminate
 - [ ] `once` lazy init block: memoize first evaluation, zero-cost on subsequent calls
 - [ ] `retry N { ... }` loop: built-in retry semantics with optional delay
 - [ ] Inline tests: `test "name" { ... }` blocks, compiled out in release, run with `kinglet test`
