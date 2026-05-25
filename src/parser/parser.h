@@ -58,6 +58,7 @@ private:
   ast::ExprPtr call();
   ast::ExprPtr primary();
   ast::ExprPtr match_expression(ast::ExprPtr value);
+  ast::ExprPtr parse_array_pattern();
 
   ast::ExprPtr condition_expression();
   std::vector<ast::Parameter> parameters();

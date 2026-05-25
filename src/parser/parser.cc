@@ -758,6 +758,24 @@ ast::ExprPtr Parser::condition_expression() {
   return expression();
 }
 
+ast::ExprPtr Parser::parse_array_pattern() {
+  const Token &bracket = previous();
+  std::vector<ast::ExprPtr> elements;
+  while (!check(TokenType::RIGHT_BRACKET) && !is_at_end()) {
+    if (match(TokenType::LET)) {
+      const Token &name_token = consume(TokenType::IDENTIFIER, "Expected variable name after 'let'.");
+      elements.push_back(std::make_unique<ast::BindingPattern>(location_of(name_token), std::string(name_token.lexeme)));
+    } else {
+      elements.push_back(expression());
+    }
+    if (!check(TokenType::RIGHT_BRACKET)) {
+      consume(TokenType::COMMA, "Expected ',' between array pattern elements.");
+    }
+  }
+  consume(TokenType::RIGHT_BRACKET, "Expected ']' after array pattern.");
+  return std::make_unique<ast::ArrayPattern>(location_of(bracket), std::move(elements));
+}
+
 ast::ExprPtr Parser::match_expression(ast::ExprPtr value) {
   const Token &match_token = previous();
   consume(TokenType::LEFT_BRACE, "Expected '{' after 'match'.");
@@ -768,6 +786,8 @@ ast::ExprPtr Parser::match_expression(ast::ExprPtr value) {
     if (match(TokenType::LET)) {
       const Token &name_token = consume(TokenType::IDENTIFIER, "Expected variable name after 'let'.");
       pattern = std::make_unique<ast::BindingPattern>(location_of(name_token), std::string(name_token.lexeme));
+    } else if (match(TokenType::LEFT_BRACKET)) {
+      pattern = parse_array_pattern();
     } else {
       pattern = expression();
     }

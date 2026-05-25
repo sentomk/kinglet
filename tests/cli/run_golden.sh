@@ -100,6 +100,7 @@ run_case "enums_basic" "run" 0 $'green\nnot red\n' ""
 # --- Match ---
 run_case "match_basic" "run" 0 $'zero\none\nother\n' ""
 run_case "match_binding" "run" 0 $'A\npass\nfail\n' ""
+run_case "match_array" "run" 0 $'20\n10\n1\n' ""
 
 # --- Generics ---
 run_case "generics_basic" "run" 0 $'42\nhello\n99\nworld\n1 one\n42\n' ""

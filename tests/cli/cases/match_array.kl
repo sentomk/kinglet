@@ -1,0 +1,27 @@
+using io;
+
+int main() {
+  int[] a = [1, 2, 3];
+  auto r1 = a match {
+    [1, let y, 3] => y * 10,
+    _ => 0,
+  };
+  io::out("{}\n", r1);
+
+  int[] b = [10, 20, 30];
+  auto r2 = b match {
+    [0, let y, _] => y,
+    [let x, _, _] => x,
+    _ => -1,
+  };
+  io::out("{}\n", r2);
+
+  int[] c = [5, 5, 5];
+  auto r3 = c match {
+    [5, 5, 5] => 1,
+    _ => 0,
+  };
+  io::out("{}\n", r3);
+
+  return 0;
+}

@@ -788,6 +788,46 @@ void Compiler::compile_expr(const ast::Expr &expr) {
           compile_expr(*arm.body);
         }
         locals_.pop_back();
+      } else if (const auto *arr_pat = dynamic_cast<const ast::ArrayPattern *>(arm.pattern.get())) {
+        std::vector<uint32_t> bind_slots;
+        std::vector<std::size_t> fail_jumps;
+        for (std::size_t i = 0; i < arr_pat->elements.size(); ++i) {
+          const auto &elem = arr_pat->elements[i];
+          const auto *elem_binding = dynamic_cast<const ast::BindingPattern *>(elem.get());
+          const auto *elem_wildcard = dynamic_cast<const ast::IdentifierExpr *>(elem.get());
+          if (elem_binding) {
+            const uint32_t slot = static_cast<uint32_t>(locals_.size());
+            locals_.push_back(Local{.name = elem_binding->name, .is_mutable = false});
+            emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
+            emit_constant(Value::int_value(static_cast<int>(i)), match_expr->location);
+            emit(OpCode::IndexGet, match_expr->location);
+            emit_operand(OpCode::StoreLocal, slot, match_expr->location);
+            emit(OpCode::Pop, match_expr->location);
+            bind_slots.push_back(slot);
+          } else if (elem_wildcard && elem_wildcard->name == "_") {
+            // wildcard element, skip
+          } else {
+            emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
+            emit_constant(Value::int_value(static_cast<int>(i)), match_expr->location);
+            emit(OpCode::IndexGet, match_expr->location);
+            compile_expr(*elem);
+            emit(OpCode::Eq, match_expr->location);
+            fail_jumps.push_back(emit_jump(OpCode::JmpFalse, match_expr->location));
+          }
+        }
+        if (arm.guard) {
+          compile_expr(*arm.guard);
+          fail_jumps.push_back(emit_jump(OpCode::JmpFalse, match_expr->location));
+          emit(OpCode::Pop, match_expr->location);
+        }
+        compile_expr(*arm.body);
+        end_jumps.push_back(emit_jump(OpCode::Jmp, match_expr->location));
+        for (std::size_t fj : fail_jumps) {
+          patch_jump(fj);
+        }
+        for (std::size_t j = 0; j < bind_slots.size(); ++j) {
+          locals_.pop_back();
+        }
       } else {
         emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
         compile_expr(*arm.pattern);

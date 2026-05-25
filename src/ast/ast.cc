@@ -212,6 +212,19 @@ void BindingPattern::print(std::ostream &out, int indent) const {
   out << "(let " << name << ")";
 }
 
+ArrayPattern::ArrayPattern(SourceLocation location, std::vector<ExprPtr> elements)
+    : Expr(location), elements(std::move(elements)) {}
+
+void ArrayPattern::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "[";
+  for (std::size_t i = 0; i < elements.size(); ++i) {
+    if (i > 0) out << ", ";
+    elements[i]->print(out, 0);
+  }
+  out << "]";
+}
+
 MatchExpr::MatchExpr(SourceLocation location, ExprPtr value, std::vector<MatchArm> arms)
     : Expr(location), value(std::move(value)), arms(std::move(arms)) {}
 

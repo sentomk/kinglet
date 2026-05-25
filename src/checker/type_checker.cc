@@ -890,16 +890,33 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     return null_type();
   }
 
+  if (const auto *arr_pat = dynamic_cast<const ast::ArrayPattern *>(&expr)) {
+    (void)arr_pat;
+    return null_type();
+  }
+
   if (const auto *match_expr = dynamic_cast<const ast::MatchExpr *>(&expr)) {
     Type value_type = check_expr(*match_expr->value);
+    Type element_type = (value_type.kind == TypeKind::Array && value_type.element_type)
+                            ? *value_type.element_type
+                            : int_type();
     Type result_type = null_type();
     for (const ast::MatchArm &arm : match_expr->arms) {
       const auto *binding = dynamic_cast<const ast::BindingPattern *>(arm.pattern.get());
+      const auto *arr_pat = dynamic_cast<const ast::ArrayPattern *>(arm.pattern.get());
       if (binding) {
         push_scope();
         declare_var(binding->name, value_type, false, binding->location);
+      } else if (arr_pat) {
+        push_scope();
+        for (const auto &elem : arr_pat->elements) {
+          const auto *elem_binding = dynamic_cast<const ast::BindingPattern *>(elem.get());
+          if (elem_binding) {
+            declare_var(elem_binding->name, element_type, false, elem_binding->location);
+          }
+        }
       }
-      if (!binding) {
+      if (!binding && !arr_pat) {
         Type pattern_type = check_expr(*arm.pattern);
         if (pattern_type.kind != TypeKind::Null && !pattern_type.is_compatible_with(value_type)) {
           error_at(arm.pattern->location, "Pattern type " + type_to_string(pattern_type) +
@@ -914,7 +931,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         }
       }
       Type body_type = check_expr(*arm.body);
-      if (binding) {
+      if (binding || arr_pat) {
         pop_scope();
       }
       if (result_type.kind == TypeKind::Null) {

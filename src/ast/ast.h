@@ -166,6 +166,13 @@ struct BindingPattern final : Expr {
   std::string name;
 };
 
+struct ArrayPattern final : Expr {
+  ArrayPattern(SourceLocation location, std::vector<ExprPtr> elements);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  std::vector<ExprPtr> elements;
+};
+
 struct MatchArm {
   ExprPtr pattern;
   ExprPtr guard;
