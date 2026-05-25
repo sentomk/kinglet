@@ -1,0 +1,21 @@
+using io;
+
+auto square(int x) {
+  x * x;
+}
+
+auto is_positive(int x) {
+  x > 0;
+}
+
+auto identity(int x) {
+  x;
+}
+
+int main() {
+  io::out.line(square(5));
+  io::out.line(is_positive(3));
+  io::out.line(is_positive(-1));
+  io::out.line(identity(42));
+  return 0;
+}

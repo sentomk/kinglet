@@ -129,6 +129,9 @@ run_case "pipeline" "run" 0 $'5 |> twice |> add_one = 11\n3 |> add_one |> twice 
 # --- First-class native functions ---
 run_case "native_fn_firstclass" "run" 0 $'hello from variable\n1 + 2 = 3\nab\npipeline test\n' $'stderr message\n'
 
+# --- Implicit return ---
+run_case "implicit_return" "run" 0 $'25\ntrue\nfalse\n42\n' ""
+
 # --- Error: missing using io ---
 run_case "error_missing_using_io" "run" 65 "" $'2:3: error: Module \'io\' is not imported. Add \'using io;\' at the top of the file.\n'
 

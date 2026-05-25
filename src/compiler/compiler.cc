@@ -136,7 +136,18 @@ void Compiler::compile_function(const ast::FunctionDecl &function, const std::st
     locals_.push_back(Local{.name = param.name, .is_mutable = true});
   }
 
+  // Detect implicit return: if last statement in body is an ExprStmt,
+  // compile it as a return instead of discarding the value.
+  const auto *body = dynamic_cast<const ast::BlockStmt *>(function.body.get());
+  if (body && !body->statements.empty()) {
+    const auto *last = dynamic_cast<const ast::ExprStmt *>(body->statements.back().get());
+    if (last && function.return_type.name != "void") {
+      implicit_return_stmt_ = last;
+    }
+  }
+
   compile_stmt(*function.body);
+  implicit_return_stmt_ = nullptr;
 
   // Fallthrough safety: implicit null return
   if (errors_.empty()) {
@@ -190,7 +201,11 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
 
   if (const auto *expr_stmt = dynamic_cast<const ast::ExprStmt *>(&stmt)) {
     compile_expr(*expr_stmt->expr);
-    emit(OpCode::Pop, expr_stmt->location);
+    if (expr_stmt == implicit_return_stmt_) {
+      emit(OpCode::Return, expr_stmt->location);
+    } else {
+      emit(OpCode::Pop, expr_stmt->location);
+    }
     return;
   }
 

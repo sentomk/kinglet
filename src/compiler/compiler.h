@@ -74,6 +74,7 @@ private:
   std::unordered_map<std::string, const ast::StructDecl *> generic_struct_decls_;
   std::unordered_map<std::string, const ast::FunctionDecl *> generic_func_decls_;
   std::vector<std::pair<std::string, const ast::FunctionDecl *>> pending_generic_funcs_;
+  const ast::ExprStmt *implicit_return_stmt_ = nullptr;
 };
 
 } // namespace kinglet
