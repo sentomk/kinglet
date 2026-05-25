@@ -86,7 +86,7 @@ jobs:
 
       - name: Update package.json version
         working-directory: editors/vscode
-        run: npm version "$VERSION" --no-git-tag-version
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
         working-directory: editors/vscode
