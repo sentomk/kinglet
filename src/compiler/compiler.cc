@@ -48,7 +48,10 @@ CompileResult Compiler::compile(const ast::Program &program) {
     if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(declaration.get())) {
       EnumMeta meta;
       meta.name = enum_decl->name;
-      meta.variants = enum_decl->variants;
+      for (const auto &v : enum_decl->variants) {
+        meta.variants.push_back(v.name);
+        meta.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));
+      }
       int idx = chunk_.add_enum_meta(std::move(meta));
       enum_indices_[enum_decl->name] = idx;
     }
@@ -563,6 +566,33 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       }
     }
 
+    // Handle enum variant construction with payload: Shape::Circle(1.0)
+    if (ns_callee) {
+      auto enum_it = enum_indices_.find(ns_callee->namespace_name);
+      if (enum_it != enum_indices_.end()) {
+        int type_idx = enum_it->second;
+        const auto &meta = chunk_.enum_metas()[static_cast<std::size_t>(type_idx)];
+        int variant_idx = -1;
+        for (int i = 0; i < static_cast<int>(meta.variants.size()); ++i) {
+          if (meta.variants[static_cast<std::size_t>(i)] == ns_callee->member_name) {
+            variant_idx = i;
+            break;
+          }
+        }
+        if (variant_idx < 0) {
+          error_at(ns_callee->location, "Unknown enum variant '" + ns_callee->member_name + "'.");
+          return;
+        }
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        uint32_t operand = (static_cast<uint32_t>(type_idx) << 16) |
+                           static_cast<uint32_t>(variant_idx);
+        emit_operand(OpCode::EnumVariantPayload, operand, call_expr->location);
+        return;
+      }
+    }
+
     // Handle io::out.line(...), io::err.line(...), io::in.secret(...)
     const auto *field_callee =
         dynamic_cast<const ast::FieldAccessExpr *>(call_expr->callee.get());
@@ -828,6 +858,72 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         for (std::size_t j = 0; j < bind_slots.size(); ++j) {
           locals_.pop_back();
         }
+      } else if (const auto *enum_pat = dynamic_cast<const ast::EnumPattern *>(arm.pattern.get())) {
+        // Enum pattern: match variant and optionally extract payload
+        auto enum_it = enum_indices_.find(enum_pat->enum_name);
+        if (enum_it == enum_indices_.end()) {
+          error_at(enum_pat->location, "Unknown enum type '" + enum_pat->enum_name + "'.");
+          return;
+        }
+        int type_idx = enum_it->second;
+        const auto &meta = chunk_.enum_metas()[static_cast<std::size_t>(type_idx)];
+        int variant_idx = -1;
+        for (int i = 0; i < static_cast<int>(meta.variants.size()); ++i) {
+          if (meta.variants[static_cast<std::size_t>(i)] == enum_pat->variant_name) {
+            variant_idx = i;
+            break;
+          }
+        }
+        if (variant_idx < 0) {
+          error_at(enum_pat->location, "Unknown enum variant '" + enum_pat->variant_name + "'.");
+          return;
+        }
+
+        std::vector<std::size_t> fail_jumps;
+        std::vector<uint32_t> bind_slots;
+
+        // Check if value matches this enum type and variant
+        // Stack: [initial_val]
+        emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
+        uint32_t operand = (static_cast<uint32_t>(type_idx) << 16) | static_cast<uint32_t>(variant_idx);
+        emit_operand(OpCode::EnumVariant, operand, enum_pat->location);
+        emit(OpCode::Eq, enum_pat->location);
+        fail_jumps.push_back(emit_jump(OpCode::JmpFalse, enum_pat->location));
+        // JmpFalse popped the Eq result; initial_val still on stack.
+
+        // Extract payload bindings — these push/pop around initial_val.
+        for (std::size_t i = 0; i < enum_pat->fields.size(); ++i) {
+          const auto *field_binding = dynamic_cast<const ast::BindingPattern *>(enum_pat->fields[i].get());
+          if (field_binding) {
+            const uint32_t slot = static_cast<uint32_t>(locals_.size());
+            locals_.push_back(Local{.name = field_binding->name, .is_mutable = false});
+            emit_operand(OpCode::LoadLocal, temp_slot, enum_pat->location);
+            emit_operand(OpCode::EnumPayloadGet, static_cast<int>(i), enum_pat->location);
+            emit_operand(OpCode::StoreLocal, slot, enum_pat->location);
+            emit(OpCode::Pop, enum_pat->location);
+            bind_slots.push_back(slot);
+          }
+        }
+
+        if (arm.guard) {
+          compile_expr(*arm.guard);
+          fail_jumps.push_back(emit_jump(OpCode::JmpFalse, match_expr->location));
+          // Pop initial_val so body result is clean on stack.
+          emit(OpCode::Pop, match_expr->location);
+        } else {
+          // No guard: pop initial_val before body.
+          emit(OpCode::Pop, match_expr->location);
+        }
+
+        compile_expr(*arm.body);
+        end_jumps.push_back(emit_jump(OpCode::Jmp, match_expr->location));
+
+        for (std::size_t fj : fail_jumps) {
+          patch_jump(fj);
+        }
+        for (std::size_t j = 0; j < bind_slots.size(); ++j) {
+          locals_.pop_back();
+        }
       } else {
         emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
         compile_expr(*arm.pattern);
@@ -874,6 +970,12 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       }
       if (variant_idx < 0) {
         error_at(ns_access->location, "Unknown enum variant '" + ns_access->member_name + "'.");
+        return;
+      }
+      int param_count = meta.variant_param_counts[static_cast<std::size_t>(variant_idx)];
+      if (param_count > 0) {
+        error_at(ns_access->location, "Enum variant '" + ns_access->member_name + "' requires " +
+                 std::to_string(param_count) + " argument(s).");
         return;
       }
       uint32_t operand = (static_cast<uint32_t>(type_idx) << 16) |

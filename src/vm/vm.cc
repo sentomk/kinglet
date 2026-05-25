@@ -575,6 +575,33 @@ VmResult Vm::run(const Chunk &chunk) {
       push(Value::enum_value(type_idx, variant_idx));
       break;
     }
+    case OpCode::EnumVariantPayload: {
+      int type_idx = instruction.operand >> 16;
+      int variant_idx = instruction.operand & 0xFFFF;
+      const auto &meta = chunk.enum_metas()[static_cast<std::size_t>(type_idx)];
+      int param_count = meta.variant_param_counts[static_cast<std::size_t>(variant_idx)];
+      std::vector<Value> payload(static_cast<std::size_t>(param_count));
+      for (int i = param_count - 1; i >= 0; --i) {
+        payload[static_cast<std::size_t>(i)] = pop();
+      }
+      push(Value::enum_value_with_payload(type_idx, variant_idx, std::move(payload)));
+      break;
+    }
+    case OpCode::EnumPayloadGet: {
+      if (stack_.size() < 1) {
+        return runtime_error("Stack underflow for enum payload get.");
+      }
+      Value enum_val = pop();
+      if (enum_val.type != ValueType::Enum) {
+        return runtime_error("EnumPayloadGet: value is not an enum.");
+      }
+      int payload_idx = instruction.operand;
+      if (payload_idx < 0 || payload_idx >= static_cast<int>(enum_val.enum_payload.size())) {
+        return runtime_error("EnumPayloadGet: payload index out of bounds.");
+      }
+      push(enum_val.enum_payload[static_cast<std::size_t>(payload_idx)]);
+      break;
+    }
     case OpCode::ArrayNew: {
       const uint32_t element_count = static_cast<uint32_t>(instruction.operand);
       if (stack_.size() < element_count) {

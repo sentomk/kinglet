@@ -225,6 +225,21 @@ void ArrayPattern::print(std::ostream &out, int indent) const {
   out << "]";
 }
 
+EnumPattern::EnumPattern(SourceLocation location, std::string enum_name, std::string variant_name,
+                         std::vector<ExprPtr> fields)
+    : Expr(location), enum_name(std::move(enum_name)), variant_name(std::move(variant_name)),
+      fields(std::move(fields)) {}
+
+void EnumPattern::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(enum-pattern " << enum_name << "::" << variant_name;
+  for (const ExprPtr &f : fields) {
+    out << " ";
+    f->print(out, 0);
+  }
+  out << ")";
+}
+
 MatchExpr::MatchExpr(SourceLocation location, ExprPtr value, std::vector<MatchArm> arms)
     : Expr(location), value(std::move(value)), arms(std::move(arms)) {}
 
@@ -531,16 +546,24 @@ void StructDecl::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-EnumDecl::EnumDecl(SourceLocation location, std::string name, std::vector<std::string> variants)
+EnumDecl::EnumDecl(SourceLocation location, std::string name, std::vector<EnumVariantDecl> variants)
     : Decl(location), name(std::move(name)), variants(std::move(variants)) {}
 
 void EnumDecl::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
   out << "(enum " << name;
-  for (const std::string &v : variants) {
+  for (const EnumVariantDecl &v : variants) {
     out << '\n';
     write_indent(out, indent + 1);
-    out << v;
+    out << v.name;
+    if (!v.param_types.empty()) {
+      out << "(";
+      for (std::size_t i = 0; i < v.param_types.size(); ++i) {
+        if (i > 0) out << ", ";
+        out << v.param_types[i].name;
+      }
+      out << ")";
+    }
   }
   out << ")";
 }

@@ -158,7 +158,14 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
     if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(decl.get())) {
       Type enum_type(TypeKind::Enum);
       enum_type.name = enum_decl->name;
-      enum_type.variants = enum_decl->variants;
+      for (const auto &v : enum_decl->variants) {
+        enum_type.variants.push_back(v.name);
+        std::vector<Type> ptypes;
+        for (const auto &pt : v.param_types) {
+          ptypes.push_back(resolve_type_expr(pt));
+        }
+        enum_type.variant_param_types.push_back(std::move(ptypes));
+      }
       type_registry_.insert_or_assign(enum_decl->name, enum_type);
       continue;
     }
@@ -597,6 +604,35 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       }
     }
 
+    // Handle enum variant construction with payload: Shape::Circle(1.0)
+    if (ns_callee) {
+      auto enum_type = lookup_type(ns_callee->namespace_name);
+      if (enum_type.has_value() && enum_type->kind == TypeKind::Enum) {
+        int variant_idx = -1;
+        for (int i = 0; i < static_cast<int>(enum_type->variants.size()); ++i) {
+          if (enum_type->variants[static_cast<std::size_t>(i)] == ns_callee->member_name) {
+            variant_idx = i;
+            break;
+          }
+        }
+        if (variant_idx < 0) {
+          error_at(ns_callee->location, "Enum '" + ns_callee->namespace_name +
+                                            "' has no variant '" + ns_callee->member_name + "'.");
+          return *enum_type;
+        }
+        const auto &expected_params = enum_type->variant_param_types[static_cast<std::size_t>(variant_idx)];
+        if (call_expr->args.size() != expected_params.size()) {
+          error_at(call_expr->location, "Enum variant '" + ns_callee->member_name + "' expects " +
+                   std::to_string(expected_params.size()) + " argument(s), got " +
+                   std::to_string(call_expr->args.size()) + ".");
+        }
+        for (std::size_t i = 0; i < call_expr->args.size(); ++i) {
+          check_expr(*call_expr->args[i]);
+        }
+        return *enum_type;
+      }
+    }
+
     // Handle io::out.line(...), io::err.line(...), io::in.secret(...)
     const auto *field_callee =
         dynamic_cast<const ast::FieldAccessExpr *>(call_expr->callee.get());
@@ -904,6 +940,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     for (const ast::MatchArm &arm : match_expr->arms) {
       const auto *binding = dynamic_cast<const ast::BindingPattern *>(arm.pattern.get());
       const auto *arr_pat = dynamic_cast<const ast::ArrayPattern *>(arm.pattern.get());
+      const auto *enum_pat = dynamic_cast<const ast::EnumPattern *>(arm.pattern.get());
       if (binding) {
         push_scope();
         declare_var(binding->name, value_type, false, binding->location);
@@ -915,8 +952,37 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
             declare_var(elem_binding->name, element_type, false, elem_binding->location);
           }
         }
+      } else if (enum_pat) {
+        push_scope();
+        auto type_opt = lookup_type(enum_pat->enum_name);
+        if (!type_opt.has_value() || type_opt->kind != TypeKind::Enum) {
+          error_at(enum_pat->location, "'" + enum_pat->enum_name + "' is not an enum type.");
+        } else {
+          int variant_idx = -1;
+          for (std::size_t i = 0; i < type_opt->variants.size(); ++i) {
+            if (type_opt->variants[i] == enum_pat->variant_name) {
+              variant_idx = static_cast<int>(i);
+              break;
+            }
+          }
+          if (variant_idx < 0) {
+            error_at(enum_pat->location, "Enum '" + enum_pat->enum_name + "' has no variant '" + enum_pat->variant_name + "'.");
+          } else {
+            const auto &param_types = type_opt->variant_param_types[static_cast<std::size_t>(variant_idx)];
+            if (enum_pat->fields.size() != param_types.size()) {
+              error_at(enum_pat->location, "Variant '" + enum_pat->variant_name + "' expects " + std::to_string(param_types.size()) + " field(s), got " + std::to_string(enum_pat->fields.size()) + ".");
+            } else {
+              for (std::size_t i = 0; i < enum_pat->fields.size(); ++i) {
+                const auto *field_binding = dynamic_cast<const ast::BindingPattern *>(enum_pat->fields[i].get());
+                if (field_binding) {
+                  declare_var(field_binding->name, param_types[i], false, field_binding->location);
+                }
+              }
+            }
+          }
+        }
       }
-      if (!binding && !arr_pat) {
+      if (!binding && !arr_pat && !enum_pat) {
         Type pattern_type = check_expr(*arm.pattern);
         if (pattern_type.kind != TypeKind::Null && !pattern_type.is_compatible_with(value_type)) {
           error_at(arm.pattern->location, "Pattern type " + type_to_string(pattern_type) +
@@ -931,7 +997,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         }
       }
       Type body_type = check_expr(*arm.body);
-      if (binding || arr_pat) {
+      if (binding || arr_pat || enum_pat) {
         pop_scope();
       }
       if (result_type.kind == TypeKind::Null) {

@@ -1,0 +1,13 @@
+using io;
+
+enum Shape {
+  Circle(float),
+  None,
+}
+
+int main() {
+  io::out.line("start");
+  Shape s = Shape::Circle(3.14);
+  io::out.line("done");
+  return 0;
+}

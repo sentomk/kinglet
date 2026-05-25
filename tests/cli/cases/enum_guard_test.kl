@@ -1,0 +1,25 @@
+using io;
+
+enum Option {
+  Some(int),
+  None,
+}
+
+int main() {
+  Option a = Option::Some(42);
+  Option b = Option::None;
+
+  string result = a match {
+    Option::Some(let x) if (x > 10) => "big",
+    Option::Some(let x) => "small",
+    Option::None => "none",
+  };
+  io::out.line(result);
+
+  string result2 = b match {
+    Option::Some(let x) => "some",
+    Option::None => "none",
+  };
+  io::out.line(result2);
+  return 0;
+}

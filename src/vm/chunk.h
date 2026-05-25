@@ -65,6 +65,8 @@ enum class OpCode : uint8_t {
   StringTrim,
   StringToUpper,
   StringToLower,
+  EnumVariantPayload,
+  EnumPayloadGet,
 };
 
 struct Instruction {
@@ -88,6 +90,7 @@ struct StructMeta {
 struct EnumMeta {
   std::string name;
   std::vector<std::string> variants;
+  std::vector<int> variant_param_counts;
 };
 
 class Chunk {

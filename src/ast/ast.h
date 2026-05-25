@@ -173,6 +173,16 @@ struct ArrayPattern final : Expr {
   std::vector<ExprPtr> elements;
 };
 
+struct EnumPattern final : Expr {
+  EnumPattern(SourceLocation location, std::string enum_name, std::string variant_name,
+              std::vector<ExprPtr> fields);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  std::string enum_name;
+  std::string variant_name;
+  std::vector<ExprPtr> fields;
+};
+
 struct MatchArm {
   ExprPtr pattern;
   ExprPtr guard;
@@ -377,12 +387,17 @@ struct StructDecl final : Decl {
   std::vector<FieldDef> fields;
 };
 
+struct EnumVariantDecl {
+  std::string name;
+  std::vector<TypeExpr> param_types;
+};
+
 struct EnumDecl final : Decl {
-  EnumDecl(SourceLocation location, std::string name, std::vector<std::string> variants);
+  EnumDecl(SourceLocation location, std::string name, std::vector<EnumVariantDecl> variants);
   void print(std::ostream &out, int indent = 0) const override;
 
   std::string name;
-  std::vector<std::string> variants;
+  std::vector<EnumVariantDecl> variants;
 };
 
 struct TopLevelStmtDecl final : Decl {

@@ -146,6 +146,14 @@ run_case "string_ops" "run" 0 $'hello world\ntrue\ntrue\ntrue\ntrue\ntrue\ne\n5\
 # --- Error: missing using io ---
 run_case "error_missing_using_io" "run" 65 "" $'2:3: error: Module \'io\' is not imported. Add \'using io;\' at the top of the file.\n'
 
+# --- Enum Payload ---
+run_case "enum_payload_test" "run" 0 $'start\ndone\n' $'10:3: warning: Unused variable \'s\'.\n'
+
+# --- Match Enum Destructuring ---
+run_case "enum_destructure_test" "run" 0 $'3.14\n12\n0\n' ""
+run_case "enum_guard_test" "run" 0 $'big\nnone\n' $'14:22: warning: Unused variable \'x\'.\n20:22: warning: Unused variable \'x\'.\n'
+run_case "match_enum_destruct" "run" 0 $'42\n-1\n' ""
+
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2
   exit 1

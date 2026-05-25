@@ -1,0 +1,27 @@
+using io;
+
+enum Shape {
+  Circle(float),
+  Rect(float, float),
+  None,
+}
+
+float area(Shape s) {
+  return s match {
+    Shape::Circle(let r) => 3.14 * r * r,
+    Shape::Rect(let w, let h) => w * h,
+    Shape::None => 0.0,
+  };
+}
+
+int main() {
+  Shape c = Shape::Circle(1.0);
+  io::out.line(area(c));
+
+  Shape r = Shape::Rect(3.0, 4.0);
+  io::out.line(area(r));
+
+  Shape n = Shape::None;
+  io::out.line(area(n));
+  return 0;
+}

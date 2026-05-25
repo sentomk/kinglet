@@ -63,6 +63,15 @@ Value Value::enum_value(int type_index, int variant_index) {
   return result;
 }
 
+Value Value::enum_value_with_payload(int type_index, int variant_index, std::vector<Value> payload) {
+  Value result;
+  result.type = ValueType::Enum;
+  result.enum_type_index = type_index;
+  result.enum_variant_index = variant_index;
+  result.enum_payload = std::move(payload);
+  return result;
+}
+
 Value Value::array_value(std::vector<Value> elements) {
   Value result;
   result.type = ValueType::Array;

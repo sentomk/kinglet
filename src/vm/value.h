@@ -51,6 +51,7 @@ struct Value {
   static Value native_function_value(NativeFn fn);
   static Value struct_value(int type_index, std::vector<Value> fields);
   static Value enum_value(int type_index, int variant_index);
+  static Value enum_value_with_payload(int type_index, int variant_index, std::vector<Value> payload);
   static Value array_value(std::vector<Value> elements);
 
   bool is_number() const;
@@ -66,6 +67,7 @@ struct Value {
   std::shared_ptr<StructData> struct_storage;
   int enum_type_index = -1;
   int enum_variant_index = -1;
+  std::vector<Value> enum_payload;
   std::shared_ptr<ArrayData> array_storage;
 };
 

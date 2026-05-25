@@ -42,6 +42,7 @@ struct Type {
   std::shared_ptr<Type> element_type;
   std::vector<FieldInfo> fields;
   std::vector<std::string> variants;
+  std::vector<std::vector<Type>> variant_param_types;
 };
 
 const Type &int_type();

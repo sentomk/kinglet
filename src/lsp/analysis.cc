@@ -65,7 +65,10 @@ private:
       sym.location = enum_decl->location;
       sym.scope_start_line = 0;
       sym.scope_end_line = 999999;
-      sym.variants = enum_decl->variants;
+      sym.variants.clear();
+      for (const auto &v : enum_decl->variants) {
+        sym.variants.push_back(v.name);
+      }
       table_.symbols.push_back(std::move(sym));
     } else if (const auto *top = dynamic_cast<const ast::TopLevelStmtDecl *>(&decl)) {
       visit_stmt(*top->stmt, 0);
