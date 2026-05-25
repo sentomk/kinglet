@@ -44,6 +44,7 @@ private:
   void instantiate_generic_struct(const ast::StructDecl *decl, const std::vector<ast::TypeExpr> &args);
   void error_at(ast::SourceLocation location, std::string message);
   void warn_at(ast::SourceLocation location, std::string message);
+  void check_fmt_args(const std::vector<ast::ExprPtr> &args, ast::SourceLocation location);
 
   struct VarInfo {
     Type type;

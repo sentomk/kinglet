@@ -272,6 +272,18 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
 
   if (const auto *expr_stmt = dynamic_cast<const ast::ExprStmt *>(&stmt)) {
     check_expr(*expr_stmt->expr);
+    if (const auto *call = dynamic_cast<const ast::CallExpr *>(expr_stmt->expr.get())) {
+      if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call->callee.get());
+          ns && ns->namespace_name == "io" && ns->member_name == "in") {
+        warn_at(call->location, "Return value of 'io::in()' is unused. Did you mean: auto x = io::in(...);?");
+      }
+      if (const auto *fa = dynamic_cast<const ast::FieldAccessExpr *>(call->callee.get())) {
+        if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(fa->object.get());
+            ns && ns->namespace_name == "io" && ns->member_name == "in") {
+          warn_at(call->location, "Return value of 'io::in." + fa->field_name + "()' is unused. Did you mean: auto x = io::in." + fa->field_name + "(...);?");
+        }
+      }
+    }
     return;
   }
 
@@ -511,6 +523,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         for (const ast::ExprPtr &arg : call_expr->args) {
           check_expr(*arg);
         }
+        check_fmt_args(call_expr->args, call_expr->location);
         return void_type();
       }
       if (ns_callee->member_name == "in") {
@@ -533,6 +546,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
           for (const ast::ExprPtr &arg : call_expr->args) {
             check_expr(*arg);
           }
+          check_fmt_args(call_expr->args, call_expr->location);
           return void_type();
         }
         if (ns_obj->member_name == "in" && field_callee->field_name == "secret") {
@@ -969,6 +983,31 @@ void TypeChecker::error_at(ast::SourceLocation location, std::string message) {
 
 void TypeChecker::warn_at(ast::SourceLocation location, std::string message) {
   errors_.push_back(TypeError{.location = location, .message = std::move(message), .severity = DiagnosticSeverity::Warning});
+}
+
+void TypeChecker::check_fmt_args(const std::vector<ast::ExprPtr> &args, ast::SourceLocation location) {
+  if (args.empty()) return;
+  const auto *str_lit = dynamic_cast<const ast::StringLiteralExpr *>(args[0].get());
+  if (!str_lit) return;
+  const std::string &fmt = str_lit->value;
+  std::size_t placeholder_count = 0;
+  for (std::size_t i = 0; i + 1 < fmt.size(); ++i) {
+    if (fmt[i] == '{' && fmt[i + 1] == '}') {
+      ++placeholder_count;
+      ++i;
+    }
+  }
+  if (placeholder_count == 0) return;
+  std::size_t value_count = args.size() - 1;
+  if (value_count < placeholder_count) {
+    warn_at(location, "Format string has " + std::to_string(placeholder_count) +
+                          " placeholder(s) but only " + std::to_string(value_count) +
+                          " argument(s) provided.");
+  } else if (value_count > placeholder_count) {
+    warn_at(location, "Format string has " + std::to_string(placeholder_count) +
+                          " placeholder(s) but " + std::to_string(value_count) +
+                          " argument(s) provided.");
+  }
 }
 
 } // namespace kinglet
