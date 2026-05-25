@@ -270,6 +270,22 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     return;
   }
 
+  if (const auto *unpack = dynamic_cast<const ast::UnpackDeclStmt *>(&stmt)) {
+    Type init_type = check_expr(*unpack->init);
+    if (init_type.kind != TypeKind::Array) {
+      error_at(unpack->location, "Destructuring requires an array value.");
+      return;
+    }
+    Type elem_type = init_type.element_type ? *init_type.element_type : int_type();
+    for (const auto &name : unpack->names) {
+      declare_var(name, elem_type, true, unpack->location);
+    }
+    if (!unpack->rest_name.empty()) {
+      declare_var(unpack->rest_name, init_type, true, unpack->location);
+    }
+    return;
+  }
+
   if (const auto *expr_stmt = dynamic_cast<const ast::ExprStmt *>(&stmt)) {
     check_expr(*expr_stmt->expr);
     if (const auto *call = dynamic_cast<const ast::CallExpr *>(expr_stmt->expr.get())) {

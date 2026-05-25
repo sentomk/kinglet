@@ -264,6 +264,29 @@ void VarDeclStmt::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
+UnpackDeclStmt::UnpackDeclStmt(SourceLocation location, std::vector<std::string> names,
+                               std::string rest_name, ExprPtr init)
+    : Stmt(location), names(std::move(names)), rest_name(std::move(rest_name)),
+      init(std::move(init)) {}
+
+void UnpackDeclStmt::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(unpack [";
+  for (std::size_t i = 0; i < names.size(); ++i) {
+    if (i > 0) out << ", ";
+    out << names[i];
+  }
+  if (!rest_name.empty()) {
+    if (!names.empty()) out << ", ";
+    out << "..." << rest_name;
+  }
+  out << "]";
+  if (init) {
+    print_child(out, *init, indent);
+  }
+  out << ")";
+}
+
 BlockStmt::BlockStmt(SourceLocation location, std::vector<StmtPtr> statements)
     : Stmt(location), statements(std::move(statements)) {}
 

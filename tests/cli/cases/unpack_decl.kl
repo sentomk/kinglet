@@ -1,0 +1,16 @@
+using io;
+
+int main() {
+  int[] nums = [10, 20, 30, 40, 50];
+  auto [a, b, ...rest] = nums;
+  io::out.line(a);
+  io::out.line(b);
+  io::out.line(rest);
+
+  string[] words = ["hello", "world"];
+  auto [x, y] = words;
+  io::out.line(x);
+  io::out.line(y);
+
+  return 0;
+}

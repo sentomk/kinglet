@@ -197,6 +197,16 @@ struct VarDeclStmt final : Stmt {
   ExprPtr init;
 };
 
+struct UnpackDeclStmt final : Stmt {
+  UnpackDeclStmt(SourceLocation location, std::vector<std::string> names,
+                 std::string rest_name, ExprPtr init);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  std::vector<std::string> names;
+  std::string rest_name;
+  ExprPtr init;
+};
+
 struct BlockStmt final : Stmt {
   BlockStmt(SourceLocation location, std::vector<StmtPtr> statements);
   void print(std::ostream &out, int indent = 0) const override;

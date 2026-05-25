@@ -199,6 +199,37 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
     return;
   }
 
+  if (const auto *unpack = dynamic_cast<const ast::UnpackDeclStmt *>(&stmt)) {
+    compile_expr(*unpack->init);
+    uint32_t arr_slot = static_cast<uint32_t>(locals_.size());
+    locals_.push_back(Local{.name = "$unpack_tmp", .is_mutable = false});
+    emit_operand(OpCode::StoreLocal, arr_slot, unpack->location);
+    emit(OpCode::Pop, unpack->location);
+
+    for (std::size_t i = 0; i < unpack->names.size(); ++i) {
+      uint32_t slot = static_cast<uint32_t>(locals_.size());
+      locals_.push_back(Local{.name = unpack->names[i], .is_mutable = true});
+      emit_operand(OpCode::LoadLocal, arr_slot, unpack->location);
+      emit_constant(Value::int_value(static_cast<int64_t>(i)), unpack->location);
+      emit(OpCode::IndexGet, unpack->location);
+      emit_operand(OpCode::StoreLocal, slot, unpack->location);
+      emit(OpCode::Pop, unpack->location);
+    }
+
+    if (!unpack->rest_name.empty()) {
+      uint32_t slot = static_cast<uint32_t>(locals_.size());
+      locals_.push_back(Local{.name = unpack->rest_name, .is_mutable = true});
+      emit_operand(OpCode::LoadLocal, arr_slot, unpack->location);
+      emit_constant(Value::int_value(static_cast<int64_t>(unpack->names.size())), unpack->location);
+      emit_operand(OpCode::LoadLocal, arr_slot, unpack->location);
+      emit(OpCode::ArrayLen, unpack->location);
+      emit(OpCode::ArraySlice, unpack->location);
+      emit_operand(OpCode::StoreLocal, slot, unpack->location);
+      emit(OpCode::Pop, unpack->location);
+    }
+    return;
+  }
+
   if (const auto *expr_stmt = dynamic_cast<const ast::ExprStmt *>(&stmt)) {
     compile_expr(*expr_stmt->expr);
     if (expr_stmt == implicit_return_stmt_) {

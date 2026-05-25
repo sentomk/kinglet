@@ -120,6 +120,8 @@ const char *token_type_name(TokenType type) {
     return "DOT";
   case TokenType::DOT_DOT:
     return "DOT_DOT";
+  case TokenType::DOT_DOT_DOT:
+    return "DOT_DOT_DOT";
   case TokenType::PLUS_EQUAL:
     return "PLUS_EQUAL";
   case TokenType::MINUS_EQUAL:

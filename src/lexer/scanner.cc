@@ -114,7 +114,10 @@ Token Scanner::scan_token() {
   case '?':
     return make_token(TokenType::QUESTION);
   case '.':
-    return make_token(match('.') ? TokenType::DOT_DOT : TokenType::DOT);
+    if (match('.')) {
+      return make_token(match('.') ? TokenType::DOT_DOT_DOT : TokenType::DOT_DOT);
+    }
+    return make_token(TokenType::DOT);
   case '+':
     return make_token(match('=') ? TokenType::PLUS_EQUAL : TokenType::PLUS);
   case '-':

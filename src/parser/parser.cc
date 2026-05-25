@@ -333,6 +333,35 @@ ast::StmtPtr Parser::var_declaration() {
   ast::TypeExpr type;
   Token name = peek();
   bool has_type = false;
+
+  if (is_type_start(peek().type)) {
+    size_t pos = current_ + 1;
+    if (pos < tokens_.size() && tokens_[pos].type == TokenType::LEFT_BRACKET &&
+        peek().type == TokenType::AUTO) {
+      advance(); // consume type token (auto/int/etc)
+      advance(); // consume '['
+      std::vector<std::string> names;
+      std::string rest_name;
+      while (!check(TokenType::RIGHT_BRACKET) && !is_at_end()) {
+        if (match(TokenType::DOT_DOT_DOT)) {
+          Token rest = consume(TokenType::IDENTIFIER, "Expected name after '...'.");
+          rest_name = token_text(rest);
+        } else {
+          Token n = consume(TokenType::IDENTIFIER, "Expected variable name in destructuring.");
+          names.push_back(token_text(n));
+        }
+        if (!check(TokenType::RIGHT_BRACKET)) {
+          consume(TokenType::COMMA, "Expected ',' between names.");
+        }
+      }
+      consume(TokenType::RIGHT_BRACKET, "Expected ']' after destructuring names.");
+      consume(TokenType::EQUAL, "Expected '=' after destructuring pattern.");
+      ast::ExprPtr init = expression();
+      consume(TokenType::SEMICOLON, "Expected ';' after variable declaration.");
+      return std::make_unique<ast::UnpackDeclStmt>(location_of(start_token), std::move(names),
+                                                   std::move(rest_name), std::move(init));
+    }
+  }
   if (is_type_start(peek().type)) {
     size_t pos = current_ + 1;
     if (pos < tokens_.size() && tokens_[pos].type == TokenType::LESS) {
@@ -854,8 +883,12 @@ bool Parser::is_declaration_start() const {
     return true;
   }
   if (!is_type_start(peek().type)) return false;
-  // Skip balanced <...> to find the identifier after the type
   size_t pos = current_ + 1;
+  if (pos < tokens_.size() && tokens_[pos].type == TokenType::LEFT_BRACKET &&
+      peek().type == TokenType::AUTO) {
+    return true;
+  }
+  // Skip balanced <...> to find the identifier after the type
   if (pos < tokens_.size() && tokens_[pos].type == TokenType::LESS) {
     int depth = 1;
     ++pos;
