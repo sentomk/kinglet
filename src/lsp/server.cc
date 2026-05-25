@@ -198,6 +198,20 @@ json::Value Server::handle_completion(const json::Value &params) {
     ++cur_line;
   }
 
+  bool in_pipeline = false;
+  {
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    auto pipe_pos = before_cursor.rfind("|>");
+    if (pipe_pos != std::string::npos) {
+      bool only_expr_after = true;
+      for (std::size_t i = pipe_pos + 2; i < before_cursor.size(); ++i) {
+        char c = before_cursor[i];
+        if (c == '(' || c == ')' || c == ';') { only_expr_after = false; break; }
+      }
+      if (only_expr_after) in_pipeline = true;
+    }
+  }
+
   std::string ns_name;
   if (character >= 2) {
     int pos = character - 1;
@@ -212,9 +226,18 @@ json::Value Server::handle_completion(const json::Value &params) {
   }
 
   if (ns_name == "io" && (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
-    items.push_back(protocol::completion_item_with_edit("out", 3, "stdout output, no newline", line, character, character));
-    items.push_back(protocol::completion_item_with_edit("err", 3, "stderr output", line, character, character));
-    items.push_back(protocol::completion_item_with_edit("in", 3, "stdin input", line, character, character));
+    if (in_pipeline) {
+      items.push_back(protocol::completion_item_with_edit("out", 3, "stdout output, no newline", line, character, character));
+      items.push_back(protocol::completion_item_with_edit("err", 3, "stderr output", line, character, character));
+      items.push_back(protocol::completion_item_with_edit("in", 3, "stdin input", line, character, character));
+    } else {
+      items.push_back(protocol::snippet_item_with_edit("out", 3, "stdout output, no newline",
+          "out($1)", line, character, character));
+      items.push_back(protocol::snippet_item_with_edit("err", 3, "stderr output",
+          "err($1)", line, character, character));
+      items.push_back(protocol::snippet_item_with_edit("in", 3, "stdin input",
+          "in($1)", line, character, character));
+    }
     return json::Value(items);
   }
 
@@ -245,14 +268,22 @@ json::Value Server::handle_completion(const json::Value &params) {
 
       if ((before_dot == "io::out" || before_dot == "io::err") &&
           (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
-        items.push_back(protocol::snippet_item_with_edit("line", 3, "print with newline",
-            "line($1)", line, character, character));
+        if (in_pipeline) {
+          items.push_back(protocol::completion_item_with_edit("line", 3, "print with newline", line, character, character));
+        } else {
+          items.push_back(protocol::snippet_item_with_edit("line", 3, "print with newline",
+              "line($1)", line, character, character));
+        }
         return json::Value(items);
       }
       if (before_dot == "io::in" &&
           (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
-        items.push_back(protocol::snippet_item_with_edit("secret", 3, "read without echo",
-            "secret($1)", line, character, character));
+        if (in_pipeline) {
+          items.push_back(protocol::completion_item_with_edit("secret", 3, "read without echo", line, character, character));
+        } else {
+          items.push_back(protocol::snippet_item_with_edit("secret", 3, "read without echo",
+              "secret($1)", line, character, character));
+        }
         return json::Value(items);
       }
 
