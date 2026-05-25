@@ -287,18 +287,25 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
   }
 
   if (const auto *expr_stmt = dynamic_cast<const ast::ExprStmt *>(&stmt)) {
-    check_expr(*expr_stmt->expr);
-    if (const auto *call = dynamic_cast<const ast::CallExpr *>(expr_stmt->expr.get())) {
-      if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call->callee.get());
-          ns && ns->namespace_name == "io" && ns->member_name == "in") {
-        warn_at(call->location, "Return value of 'io::in()' is unused. Did you mean: auto x = io::in(...);?");
-      }
-      if (const auto *fa = dynamic_cast<const ast::FieldAccessExpr *>(call->callee.get())) {
-        if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(fa->object.get());
-            ns && ns->namespace_name == "io" && ns->member_name == "in") {
-          warn_at(call->location, "Return value of 'io::in." + fa->field_name + "()' is unused. Did you mean: auto x = io::in." + fa->field_name + "(...);?");
+    Type result_type = check_expr(*expr_stmt->expr);
+    if (result_type.kind != TypeKind::Void) {
+      bool suppress = false;
+      if (dynamic_cast<const ast::AssignExpr *>(expr_stmt->expr.get()))
+        suppress = true;
+      if (const auto *call = dynamic_cast<const ast::CallExpr *>(expr_stmt->expr.get())) {
+        if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call->callee.get())) {
+          if (ns->namespace_name == "io" && (ns->member_name == "out" || ns->member_name == "err"))
+            suppress = true;
+        }
+        if (const auto *fa = dynamic_cast<const ast::FieldAccessExpr *>(call->callee.get())) {
+          if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(fa->object.get())) {
+            if (ns->namespace_name == "io" && (ns->member_name == "out" || ns->member_name == "err"))
+              suppress = true;
+          }
         }
       }
+      if (!suppress)
+        warn_at(expr_stmt->location, "Expression result is unused.");
     }
     return;
   }
@@ -475,6 +482,10 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
 
     switch (binary->op) {
     case ast::BinaryOp::Add:
+      if (left_type.kind == TypeKind::String && right_type.kind == TypeKind::String) {
+        return string_type();
+      }
+      [[fallthrough]];
     case ast::BinaryOp::Sub:
     case ast::BinaryOp::Mul:
     case ast::BinaryOp::Div:
@@ -697,6 +708,77 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         error_at(call_expr->location, "Array has no method '" + method + "'.");
         return int_type();
       }
+      if (obj_type.kind == TypeKind::String) {
+        const std::string &method = field_callee->field_name;
+        if (method == "len") {
+          if (!call_expr->args.empty())
+            error_at(call_expr->location, "len() takes no arguments.");
+          return int_type();
+        }
+        if (method == "contains" || method == "starts_with" || method == "ends_with") {
+          if (call_expr->args.size() != 1)
+            error_at(call_expr->location, method + "() takes exactly 1 argument.");
+          else {
+            Type arg = check_expr(*call_expr->args[0]);
+            if (arg.kind != TypeKind::String)
+              error_at(call_expr->args[0]->location, method + "() argument must be string.");
+          }
+          return bool_type();
+        }
+        if (method == "index_of") {
+          if (call_expr->args.size() != 1)
+            error_at(call_expr->location, "index_of() takes exactly 1 argument.");
+          else {
+            Type arg = check_expr(*call_expr->args[0]);
+            if (arg.kind != TypeKind::String)
+              error_at(call_expr->args[0]->location, "index_of() argument must be string.");
+          }
+          return int_type();
+        }
+        if (method == "slice") {
+          if (call_expr->args.size() != 2)
+            error_at(call_expr->location, "slice() takes exactly 2 arguments.");
+          else {
+            Type s = check_expr(*call_expr->args[0]);
+            Type e = check_expr(*call_expr->args[1]);
+            if (s.kind != TypeKind::Int)
+              error_at(call_expr->args[0]->location, "slice() start must be Int.");
+            if (e.kind != TypeKind::Int)
+              error_at(call_expr->args[1]->location, "slice() end must be Int.");
+          }
+          return string_type();
+        }
+        if (method == "replace") {
+          if (call_expr->args.size() != 2)
+            error_at(call_expr->location, "replace() takes exactly 2 arguments.");
+          else {
+            Type a = check_expr(*call_expr->args[0]);
+            Type b = check_expr(*call_expr->args[1]);
+            if (a.kind != TypeKind::String)
+              error_at(call_expr->args[0]->location, "replace() arguments must be string.");
+            if (b.kind != TypeKind::String)
+              error_at(call_expr->args[1]->location, "replace() arguments must be string.");
+          }
+          return string_type();
+        }
+        if (method == "split") {
+          if (call_expr->args.size() != 1)
+            error_at(call_expr->location, "split() takes exactly 1 argument.");
+          else {
+            Type arg = check_expr(*call_expr->args[0]);
+            if (arg.kind != TypeKind::String)
+              error_at(call_expr->args[0]->location, "split() argument must be string.");
+          }
+          return array_type(string_type());
+        }
+        if (method == "trim" || method == "to_upper" || method == "to_lower") {
+          if (!call_expr->args.empty())
+            error_at(call_expr->location, method + "() takes no arguments.");
+          return string_type();
+        }
+        error_at(call_expr->location, "String has no method '" + method + "'.");
+        return int_type();
+      }
     }
 
     if (!call_expr->type_args.empty()) {
@@ -869,6 +951,17 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       error_at(field_access->location, "Array has no method '" + method + "'.");
       return int_type();
     }
+    if (obj_type.kind == TypeKind::String) {
+      const std::string &method = field_access->field_name;
+      if (method == "len" || method == "contains" || method == "starts_with" ||
+          method == "ends_with" || method == "index_of" || method == "slice" ||
+          method == "replace" || method == "split" || method == "trim" ||
+          method == "to_upper" || method == "to_lower") {
+        return void_type();
+      }
+      error_at(field_access->location, "String has no method '" + method + "'.");
+      return int_type();
+    }
     if (obj_type.kind != TypeKind::Struct) {
       if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(field_access->object.get());
           ns && used_.count(ns->namespace_name) == 0) {
@@ -944,6 +1037,9 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     Type index_type = check_expr(*index_expr->index);
     if (index_type.kind != TypeKind::Int) {
       error_at(index_expr->index->location, "Array index must be an Int.");
+    }
+    if (object_type.kind == TypeKind::String) {
+      return string_type();
     }
     if (object_type.kind != TypeKind::Array || !object_type.element_type) {
       error_at(index_expr->location, "Cannot index non-array type.");

@@ -209,6 +209,20 @@ const char *opcode_name(OpCode op) {
     return "ArraySlice";
   case OpCode::ArrayReverse:
     return "ArrayReverse";
+  case OpCode::StringStartsWith:
+    return "StringStartsWith";
+  case OpCode::StringEndsWith:
+    return "StringEndsWith";
+  case OpCode::StringReplace:
+    return "StringReplace";
+  case OpCode::StringSplit:
+    return "StringSplit";
+  case OpCode::StringTrim:
+    return "StringTrim";
+  case OpCode::StringToUpper:
+    return "StringToUpper";
+  case OpCode::StringToLower:
+    return "StringToLower";
   }
   return "Unknown";
 }

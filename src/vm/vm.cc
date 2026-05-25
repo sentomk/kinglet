@@ -1,6 +1,7 @@
 #include "vm/vm.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -53,6 +54,14 @@ VmResult Vm::run(const Chunk &chunk) {
     case OpCode::Multiply:
     case OpCode::Divide:
     case OpCode::Modulo: {
+      if (instruction.op == OpCode::Add && stack_.size() >= 2 &&
+          stack_[stack_.size() - 1].type == ValueType::String &&
+          stack_[stack_.size() - 2].type == ValueType::String) {
+        Value right = pop();
+        Value left = pop();
+        push(Value::string_value(left.string_storage + right.string_storage));
+        break;
+      }
       std::string error;
       if (!binary_numeric(instruction.op, &error)) {
         return runtime_error(std::move(error));
@@ -345,26 +354,44 @@ VmResult Vm::run(const Chunk &chunk) {
                      left.bool_value_storage == right.bool_value_storage);
         }
       } else {
-        if (!left.is_number() || !right.is_number()) {
+        if (left.type == ValueType::String && right.type == ValueType::String) {
+          switch (instruction.op) {
+          case OpCode::Lt:
+            result = left.string_storage < right.string_storage;
+            break;
+          case OpCode::Gt:
+            result = left.string_storage > right.string_storage;
+            break;
+          case OpCode::Le:
+            result = left.string_storage <= right.string_storage;
+            break;
+          case OpCode::Ge:
+            result = left.string_storage >= right.string_storage;
+            break;
+          default:
+            break;
+          }
+        } else if (!left.is_number() || !right.is_number()) {
           return runtime_error("Comparison operands must be numeric.");
-        }
-        double lhs = left.as_double();
-        double rhs = right.as_double();
-        switch (instruction.op) {
-        case OpCode::Lt:
-          result = lhs < rhs;
-          break;
-        case OpCode::Gt:
-          result = lhs > rhs;
-          break;
-        case OpCode::Le:
-          result = lhs <= rhs;
-          break;
-        case OpCode::Ge:
-          result = lhs >= rhs;
-          break;
-        default:
-          break;
+        } else {
+          double lhs = left.as_double();
+          double rhs = right.as_double();
+          switch (instruction.op) {
+          case OpCode::Lt:
+            result = lhs < rhs;
+            break;
+          case OpCode::Gt:
+            result = lhs > rhs;
+            break;
+          case OpCode::Le:
+            result = lhs <= rhs;
+            break;
+          case OpCode::Ge:
+            result = lhs >= rhs;
+            break;
+          default:
+            break;
+          }
         }
       }
       push(Value::bool_value(result));
@@ -565,18 +592,30 @@ VmResult Vm::run(const Chunk &chunk) {
         return runtime_error("Stack underflow for array indexing.");
       }
       Value index = pop();
-      Value array = pop();
-      if (array.type != ValueType::Array || !array.array_storage) {
+      Value object = pop();
+      if (object.type == ValueType::String) {
+        if (index.type != ValueType::Int) {
+          return runtime_error("String index must be an integer.");
+        }
+        if (index.int_value_storage < 0 ||
+            static_cast<std::size_t>(index.int_value_storage) >= object.string_storage.size()) {
+          return runtime_error("String index out of bounds.");
+        }
+        push(Value::string_value(
+            std::string(1, object.string_storage[static_cast<std::size_t>(index.int_value_storage)])));
+        break;
+      }
+      if (object.type != ValueType::Array || !object.array_storage) {
         return runtime_error("Cannot index non-array value.");
       }
       if (index.type != ValueType::Int) {
         return runtime_error("Array index must be an integer.");
       }
       if (index.int_value_storage < 0 ||
-          static_cast<std::size_t>(index.int_value_storage) >= array.array_storage->elements.size()) {
+          static_cast<std::size_t>(index.int_value_storage) >= object.array_storage->elements.size()) {
         return runtime_error("Array index out of bounds.");
       }
-      push(array.array_storage->elements[static_cast<std::size_t>(index.int_value_storage)]);
+      push(object.array_storage->elements[static_cast<std::size_t>(index.int_value_storage)]);
       break;
     }
     case OpCode::IndexSet: {
@@ -601,11 +640,15 @@ VmResult Vm::run(const Chunk &chunk) {
       break;
     }
     case OpCode::ArrayLen: {
-      Value array = pop();
-      if (array.type != ValueType::Array || !array.array_storage) {
+      Value obj = pop();
+      if (obj.type == ValueType::String) {
+        push(Value::int_value(static_cast<int64_t>(obj.string_storage.size())));
+        break;
+      }
+      if (obj.type != ValueType::Array || !obj.array_storage) {
         return runtime_error("Cannot call len() on non-array value.");
       }
-      push(Value::int_value(static_cast<int64_t>(array.array_storage->elements.size())));
+      push(Value::int_value(static_cast<int64_t>(obj.array_storage->elements.size())));
       break;
     }
     case OpCode::ArrayPush: {
@@ -652,12 +695,19 @@ VmResult Vm::run(const Chunk &chunk) {
     }
     case OpCode::ArrayContains: {
       Value needle = pop();
-      Value array = pop();
-      if (array.type != ValueType::Array || !array.array_storage) {
+      Value obj = pop();
+      if (obj.type == ValueType::String) {
+        if (needle.type != ValueType::String) {
+          return runtime_error("contains() argument must be a string.");
+        }
+        push(Value::bool_value(obj.string_storage.find(needle.string_storage) != std::string::npos));
+        break;
+      }
+      if (obj.type != ValueType::Array || !obj.array_storage) {
         return runtime_error("Cannot call contains() on non-array value.");
       }
       bool found = false;
-      for (const auto &elem : array.array_storage->elements) {
+      for (const auto &elem : obj.array_storage->elements) {
         if (elem.type == needle.type) {
           if (elem.type == ValueType::Int && elem.int_value_storage == needle.int_value_storage) {
             found = true; break;
@@ -712,13 +762,21 @@ VmResult Vm::run(const Chunk &chunk) {
     }
     case OpCode::ArrayIndexOf: {
       Value needle = pop();
-      Value array = pop();
-      if (array.type != ValueType::Array || !array.array_storage) {
+      Value obj = pop();
+      if (obj.type == ValueType::String) {
+        if (needle.type != ValueType::String) {
+          return runtime_error("index_of() argument must be a string.");
+        }
+        auto pos = obj.string_storage.find(needle.string_storage);
+        push(Value::int_value(pos == std::string::npos ? -1 : static_cast<int64_t>(pos)));
+        break;
+      }
+      if (obj.type != ValueType::Array || !obj.array_storage) {
         return runtime_error("Cannot call index_of() on non-array value.");
       }
       int64_t found = -1;
-      for (std::size_t i = 0; i < array.array_storage->elements.size(); ++i) {
-        const auto &elem = array.array_storage->elements[i];
+      for (std::size_t i = 0; i < obj.array_storage->elements.size(); ++i) {
+        const auto &elem = obj.array_storage->elements[i];
         if (elem.type == needle.type) {
           bool match = false;
           if (elem.type == ValueType::Int && elem.int_value_storage == needle.int_value_storage) match = true;
@@ -734,16 +792,29 @@ VmResult Vm::run(const Chunk &chunk) {
     case OpCode::ArraySlice: {
       Value end_val = pop();
       Value start_val = pop();
-      Value array = pop();
-      if (array.type != ValueType::Array || !array.array_storage) {
-        return runtime_error("Cannot call slice() on non-array value.");
-      }
+      Value obj = pop();
       if (start_val.type != ValueType::Int || end_val.type != ValueType::Int) {
         return runtime_error("slice() arguments must be integers.");
       }
-      auto &elems = array.array_storage->elements;
       auto start = start_val.int_value_storage;
       auto end = end_val.int_value_storage;
+      if (obj.type == ValueType::String) {
+        auto len = static_cast<int64_t>(obj.string_storage.size());
+        if (start < 0) start = 0;
+        if (end > len) end = len;
+        if (start >= end) {
+          push(Value::string_value(""));
+          break;
+        }
+        push(Value::string_value(obj.string_storage.substr(
+            static_cast<std::size_t>(start),
+            static_cast<std::size_t>(end - start))));
+        break;
+      }
+      if (obj.type != ValueType::Array || !obj.array_storage) {
+        return runtime_error("Cannot call slice() on non-array value.");
+      }
+      auto &elems = obj.array_storage->elements;
       if (start < 0) start = 0;
       if (end > static_cast<int64_t>(elems.size())) end = static_cast<int64_t>(elems.size());
       if (start >= end) {
@@ -762,6 +833,107 @@ VmResult Vm::run(const Chunk &chunk) {
       std::reverse(array.array_storage->elements.begin(),
                    array.array_storage->elements.end());
       push(Value::null_value());
+      break;
+    }
+    case OpCode::StringStartsWith: {
+      Value prefix = pop();
+      Value str = pop();
+      if (str.type != ValueType::String || prefix.type != ValueType::String) {
+        return runtime_error("starts_with() requires string arguments.");
+      }
+      bool result = str.string_storage.size() >= prefix.string_storage.size() &&
+                    str.string_storage.compare(0, prefix.string_storage.size(), prefix.string_storage) == 0;
+      push(Value::bool_value(result));
+      break;
+    }
+    case OpCode::StringEndsWith: {
+      Value suffix = pop();
+      Value str = pop();
+      if (str.type != ValueType::String || suffix.type != ValueType::String) {
+        return runtime_error("ends_with() requires string arguments.");
+      }
+      bool result = str.string_storage.size() >= suffix.string_storage.size() &&
+                    str.string_storage.compare(
+                        str.string_storage.size() - suffix.string_storage.size(),
+                        suffix.string_storage.size(), suffix.string_storage) == 0;
+      push(Value::bool_value(result));
+      break;
+    }
+    case OpCode::StringReplace: {
+      Value new_str = pop();
+      Value old_str = pop();
+      Value str = pop();
+      if (str.type != ValueType::String || old_str.type != ValueType::String ||
+          new_str.type != ValueType::String) {
+        return runtime_error("replace() requires string arguments.");
+      }
+      std::string result = str.string_storage;
+      if (!old_str.string_storage.empty()) {
+        std::size_t pos = 0;
+        while ((pos = result.find(old_str.string_storage, pos)) != std::string::npos) {
+          result.replace(pos, old_str.string_storage.size(), new_str.string_storage);
+          pos += new_str.string_storage.size();
+        }
+      }
+      push(Value::string_value(std::move(result)));
+      break;
+    }
+    case OpCode::StringSplit: {
+      Value delim = pop();
+      Value str = pop();
+      if (str.type != ValueType::String || delim.type != ValueType::String) {
+        return runtime_error("split() requires string arguments.");
+      }
+      std::vector<Value> parts;
+      if (delim.string_storage.empty()) {
+        for (char c : str.string_storage) {
+          parts.push_back(Value::string_value(std::string(1, c)));
+        }
+      } else {
+        std::size_t start = 0;
+        std::size_t pos;
+        while ((pos = str.string_storage.find(delim.string_storage, start)) != std::string::npos) {
+          parts.push_back(Value::string_value(str.string_storage.substr(start, pos - start)));
+          start = pos + delim.string_storage.size();
+        }
+        parts.push_back(Value::string_value(str.string_storage.substr(start)));
+      }
+      push(Value::array_value(std::move(parts)));
+      break;
+    }
+    case OpCode::StringTrim: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("trim() requires a string.");
+      }
+      auto &s = str.string_storage;
+      auto start = s.find_first_not_of(" \t\n\r");
+      if (start == std::string::npos) {
+        push(Value::string_value(""));
+      } else {
+        auto end = s.find_last_not_of(" \t\n\r");
+        push(Value::string_value(s.substr(start, end - start + 1)));
+      }
+      break;
+    }
+    case OpCode::StringToUpper: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("to_upper() requires a string.");
+      }
+      std::string result = str.string_storage;
+      for (auto &c : result) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      push(Value::string_value(std::move(result)));
+      break;
+    }
+    case OpCode::StringToLower: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("to_lower() requires a string.");
+      }
+      std::string result = str.string_storage;
+      for (auto &c : result) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      push(Value::string_value(std::move(result)));
       break;
     }
     }

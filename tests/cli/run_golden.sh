@@ -138,6 +138,9 @@ run_case "unpack_decl" "run" 0 $'10\n20\n[30, 40, 50]\nhello\nworld\n' ""
 # --- Guard Statement ---
 run_case "guard_stmt" "run" 0 $'5\n-1\n5\n3\n0\n' ""
 
+# --- String Operations ---
+run_case "string_ops" "run" 0 $'hello world\ntrue\ntrue\ntrue\ntrue\ntrue\ne\n5\ntrue\nfalse\ntrue\ntrue\nfalse\n2\n-1\nhello\nworld\nhello kinglet\n3\na\nb\nc\nhello\nHELLO\nhello\n' ""
+
 # --- Error: missing using io ---
 run_case "error_missing_using_io" "run" 65 "" $'2:3: error: Module \'io\' is not imported. Add \'using io;\' at the top of the file.\n'
 

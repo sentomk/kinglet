@@ -58,6 +58,13 @@ enum class OpCode : uint8_t {
   ArrayIndexOf,
   ArraySlice,
   ArrayReverse,
+  StringStartsWith,
+  StringEndsWith,
+  StringReplace,
+  StringSplit,
+  StringTrim,
+  StringToUpper,
+  StringToLower,
 };
 
 struct Instruction {

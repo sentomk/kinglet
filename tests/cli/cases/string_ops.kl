@@ -1,0 +1,57 @@
+using io;
+
+int main() {
+  // String concatenation
+  auto s = "hello" + " " + "world";
+  io::out.line(s);
+
+  // String comparison
+  io::out.line("abc" < "abd");
+  io::out.line("xyz" > "abc");
+  io::out.line("abc" == "abc");
+  io::out.line("abc" >= "abc");
+  io::out.line("abc" <= "abd");
+
+  // String indexing
+  auto ch = "hello"[1];
+  io::out.line(ch);
+
+  // len
+  io::out.line("hello".len());
+
+  // contains
+  io::out.line("hello world".contains("world"));
+  io::out.line("hello world".contains("xyz"));
+
+  // starts_with / ends_with
+  io::out.line("hello".starts_with("hel"));
+  io::out.line("hello".ends_with("llo"));
+  io::out.line("hello".starts_with("xyz"));
+
+  // index_of
+  io::out.line("hello".index_of("ll"));
+  io::out.line("hello".index_of("xyz"));
+
+  // slice
+  io::out.line("hello world".slice(0, 5));
+  io::out.line("hello world".slice(6, 11));
+
+  // replace
+  io::out.line("hello world".replace("world", "kinglet"));
+
+  // split
+  auto parts = "a,b,c".split(",");
+  io::out.line(parts.len());
+  io::out.line(parts[0]);
+  io::out.line(parts[1]);
+  io::out.line(parts[2]);
+
+  // trim
+  io::out.line("  hello  ".trim());
+
+  // to_upper / to_lower
+  io::out.line("Hello".to_upper());
+  io::out.line("Hello".to_lower());
+
+  return 0;
+}

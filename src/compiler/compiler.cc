@@ -597,13 +597,15 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       }
     }
 
-    // Handle array method calls: arr.len(), arr.push(x), etc.
+    // Handle array/string method calls
     if (field_callee) {
       const std::string &method = field_callee->field_name;
       if (method == "len" || method == "push" || method == "pop" ||
           method == "remove" || method == "contains" || method == "clear" ||
           method == "insert" || method == "index_of" || method == "slice" ||
-          method == "reverse") {
+          method == "reverse" || method == "starts_with" ||
+          method == "ends_with" || method == "replace" || method == "split" ||
+          method == "trim" || method == "to_upper" || method == "to_lower") {
         compile_expr(*field_callee->object);
         if (method == "len") {
           emit(OpCode::ArrayLen, call_expr->location);
@@ -651,6 +653,39 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         }
         if (method == "reverse") {
           emit(OpCode::ArrayReverse, call_expr->location);
+          return;
+        }
+        if (method == "starts_with") {
+          compile_expr(*call_expr->args[0]);
+          emit(OpCode::StringStartsWith, call_expr->location);
+          return;
+        }
+        if (method == "ends_with") {
+          compile_expr(*call_expr->args[0]);
+          emit(OpCode::StringEndsWith, call_expr->location);
+          return;
+        }
+        if (method == "replace") {
+          compile_expr(*call_expr->args[0]);
+          compile_expr(*call_expr->args[1]);
+          emit(OpCode::StringReplace, call_expr->location);
+          return;
+        }
+        if (method == "split") {
+          compile_expr(*call_expr->args[0]);
+          emit(OpCode::StringSplit, call_expr->location);
+          return;
+        }
+        if (method == "trim") {
+          emit(OpCode::StringTrim, call_expr->location);
+          return;
+        }
+        if (method == "to_upper") {
+          emit(OpCode::StringToUpper, call_expr->location);
+          return;
+        }
+        if (method == "to_lower") {
+          emit(OpCode::StringToLower, call_expr->location);
           return;
         }
       }
