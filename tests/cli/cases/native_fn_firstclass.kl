@@ -1,0 +1,19 @@
+using io;
+
+int main() {
+  auto printer = io::out.line;
+  printer("hello from variable");
+  printer("{} + {} = {}", 1, 2, 3);
+
+  auto raw = io::out;
+  raw("a");
+  raw("b");
+  io::out.line("");
+
+  "pipeline test" |> io::out.line;
+
+  auto err_fn = io::err.line;
+  err_fn("stderr message");
+
+  return 0;
+}

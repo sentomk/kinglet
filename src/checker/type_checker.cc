@@ -384,10 +384,16 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         return void_type();
       }
       if (ns_access->member_name == "out" || ns_access->member_name == "err") {
-        return void_type();
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(void_type());
+        return fn;
       }
       if (ns_access->member_name == "in") {
-        return string_type();
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(string_type());
+        return fn;
       }
     }
     auto enum_type = lookup_type(ns_access->namespace_name);
@@ -728,6 +734,12 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       error_at(call_expr->location, "Cannot call non-function type.");
       return int_type();
     }
+    if (callee_type.name == "native_fn") {
+      for (std::size_t i = 0; i < call_expr->args.size(); ++i) {
+        check_expr(*call_expr->args[i]);
+      }
+      return callee_type.return_type ? *callee_type.return_type : void_type();
+    }
     if (call_expr->args.size() != callee_type.param_types.size()) {
       error_at(call_expr->location,
                "Expected " + std::to_string(callee_type.param_types.size()) + " arguments, got " +
@@ -807,10 +819,16 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     if (ns_obj && ns_obj->namespace_name == "io" && used_.count("io") != 0) {
       if ((ns_obj->member_name == "out" || ns_obj->member_name == "err") &&
           field_access->field_name == "line") {
-        return void_type();
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(void_type());
+        return fn;
       }
       if (ns_obj->member_name == "in" && field_access->field_name == "secret") {
-        return string_type();
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(string_type());
+        return fn;
       }
     }
 

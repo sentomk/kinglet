@@ -105,6 +105,7 @@ VmResult Vm::run(const Chunk &chunk) {
       case ValueType::Struct:
       case ValueType::Enum:
       case ValueType::Array:
+      case ValueType::NativeFunction:
         truthy = true;
         break;
       }
@@ -143,6 +144,94 @@ VmResult Vm::run(const Chunk &chunk) {
         return runtime_error("Stack underflow for function call.");
       }
       Value callee = pop();
+      if (callee.type == ValueType::NativeFunction) {
+        std::vector<Value> args(arg_count);
+        for (uint32_t i = 0; i < arg_count; ++i) {
+          args[arg_count - 1 - i] = pop();
+        }
+        switch (callee.native_fn_storage) {
+        case NativeFn::IoOut:
+        case NativeFn::IoOutLine:
+          if (!args.empty() && args[0].type == ValueType::String) {
+            const std::string &fmt = args[0].string_storage;
+            std::size_t val_idx = 1;
+            for (std::size_t pos = 0; pos < fmt.size(); ++pos) {
+              if (pos + 1 < fmt.size() && fmt[pos] == '{' && fmt[pos + 1] == '}') {
+                if (val_idx < args.size()) {
+                  std::cout << args[val_idx++];
+                } else {
+                  std::cout << "{}";
+                }
+                ++pos;
+              } else {
+                std::cout << fmt[pos];
+              }
+            }
+          } else {
+            for (const Value &arg : args) {
+              std::cout << arg;
+            }
+          }
+          if (callee.native_fn_storage == NativeFn::IoOutLine) {
+            std::cout << '\n';
+          }
+          std::cout << std::flush;
+          push(Value::null_value());
+          break;
+        case NativeFn::IoErr:
+        case NativeFn::IoErrLine:
+          if (!args.empty() && args[0].type == ValueType::String) {
+            const std::string &fmt = args[0].string_storage;
+            std::size_t val_idx = 1;
+            for (std::size_t pos = 0; pos < fmt.size(); ++pos) {
+              if (pos + 1 < fmt.size() && fmt[pos] == '{' && fmt[pos + 1] == '}') {
+                if (val_idx < args.size()) {
+                  std::cerr << args[val_idx++];
+                } else {
+                  std::cerr << "{}";
+                }
+                ++pos;
+              } else {
+                std::cerr << fmt[pos];
+              }
+            }
+          } else {
+            for (const Value &arg : args) {
+              std::cerr << arg;
+            }
+          }
+          if (callee.native_fn_storage == NativeFn::IoErrLine) {
+            std::cerr << '\n';
+          }
+          std::cerr << std::flush;
+          push(Value::null_value());
+          break;
+        case NativeFn::IoIn:
+        case NativeFn::IoInSecret:
+          for (const Value &arg : args) {
+            if (arg.type == ValueType::String) {
+              std::cout << arg.string_storage << std::flush;
+            }
+          }
+          if (callee.native_fn_storage == NativeFn::IoInSecret) {
+            disable_echo();
+          }
+          {
+            std::string line;
+            if (!std::getline(std::cin, line)) {
+              push(Value::null_value());
+            } else {
+              push(Value::string_value(std::move(line)));
+            }
+          }
+          if (callee.native_fn_storage == NativeFn::IoInSecret) {
+            restore_echo();
+            std::cout << '\n';
+          }
+          break;
+        }
+        break;
+      }
       if (callee.type != ValueType::Function) {
         return runtime_error("Attempted to call a non-function value.");
       }
@@ -204,6 +293,7 @@ VmResult Vm::run(const Chunk &chunk) {
       case ValueType::Struct:
       case ValueType::Enum:
       case ValueType::Array:
+      case ValueType::NativeFunction:
         truthy = true;
         break;
       }

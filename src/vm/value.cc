@@ -41,6 +41,13 @@ Value Value::function_value(int index) {
   return result;
 }
 
+Value Value::native_function_value(NativeFn fn) {
+  Value result;
+  result.type = ValueType::NativeFunction;
+  result.native_fn_storage = fn;
+  return result;
+}
+
 Value Value::struct_value(int type_index, std::vector<Value> fields) {
   Value result;
   result.type = ValueType::Struct;
@@ -111,6 +118,9 @@ std::ostream &operator<<(std::ostream &out, const Value &value) {
       }
     }
     out << "]";
+    break;
+  case ValueType::NativeFunction:
+    out << "<native-fn>";
     break;
   }
   return out;

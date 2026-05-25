@@ -649,10 +649,10 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       }
     }
 
-    compile_expr(*call_expr->callee);
     for (const ast::ExprPtr &arg : call_expr->args) {
       compile_expr(*arg);
     }
+    compile_expr(*call_expr->callee);
     emit_operand(OpCode::Call, static_cast<uint32_t>(call_expr->args.size()), call_expr->location);
     return;
   }
@@ -717,6 +717,21 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       emit_operand(OpCode::EnumVariant, operand, ns_access->location);
       return;
     }
+    if (ns_access->namespace_name == "io" && used_.count("io") != 0) {
+      NativeFn fn;
+      if (ns_access->member_name == "out") {
+        fn = NativeFn::IoOut;
+      } else if (ns_access->member_name == "err") {
+        fn = NativeFn::IoErr;
+      } else if (ns_access->member_name == "in") {
+        fn = NativeFn::IoIn;
+      } else {
+        error_at(ns_access->location, "Unknown io member '" + ns_access->member_name + "'.");
+        return;
+      }
+      emit_constant(Value::native_function_value(fn), ns_access->location);
+      return;
+    }
     if (used_.count(ns_access->namespace_name) != 0) {
       return;
     }
@@ -751,6 +766,22 @@ void Compiler::compile_expr(const ast::Expr &expr) {
   }
 
   if (const auto *field_access = dynamic_cast<const ast::FieldAccessExpr *>(&expr)) {
+    if (const auto *ns_obj = dynamic_cast<const ast::NamespaceAccessExpr *>(field_access->object.get());
+        ns_obj && ns_obj->namespace_name == "io" && used_.count("io") != 0) {
+      NativeFn fn;
+      if (ns_obj->member_name == "out" && field_access->field_name == "line") {
+        fn = NativeFn::IoOutLine;
+      } else if (ns_obj->member_name == "err" && field_access->field_name == "line") {
+        fn = NativeFn::IoErrLine;
+      } else if (ns_obj->member_name == "in" && field_access->field_name == "secret") {
+        fn = NativeFn::IoInSecret;
+      } else {
+        error_at(field_access->location, "Unknown io method '" + ns_obj->member_name + "." + field_access->field_name + "'.");
+        return;
+      }
+      emit_constant(Value::native_function_value(fn), field_access->location);
+      return;
+    }
     compile_expr(*field_access->object);
     uint32_t field_const = chunk_.add_constant(Value::string_value(field_access->field_name));
     emit_operand(OpCode::FieldGet, field_const, field_access->location);
