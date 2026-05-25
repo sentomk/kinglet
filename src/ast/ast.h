@@ -223,6 +223,14 @@ struct IfStmt final : Stmt {
   StmtPtr else_branch;
 };
 
+struct GuardStmt final : Stmt {
+  GuardStmt(SourceLocation location, ExprPtr condition, StmtPtr else_body);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  ExprPtr condition;
+  StmtPtr else_body;
+};
+
 struct WhileStmt final : Stmt {
   WhileStmt(SourceLocation location, ExprPtr condition, StmtPtr body);
   void print(std::ostream &out, int indent = 0) const override;

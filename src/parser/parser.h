@@ -38,6 +38,7 @@ private:
   ast::StmtPtr return_statement();
   ast::StmtPtr if_statement();
   ast::StmtPtr while_statement();
+  ast::StmtPtr guard_statement();
   ast::StmtPtr for_statement();
   ast::StmtPtr break_statement();
   ast::StmtPtr continue_statement();

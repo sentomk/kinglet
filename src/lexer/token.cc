@@ -36,6 +36,8 @@ const char *token_type_name(TokenType type) {
     return "BREAK";
   case TokenType::CONTINUE:
     return "CONTINUE";
+  case TokenType::GUARD:
+    return "GUARD";
   case TokenType::INSPECT:
     return "INSPECT";
   case TokenType::WHEN:

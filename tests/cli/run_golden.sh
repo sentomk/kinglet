@@ -135,6 +135,9 @@ run_case "implicit_return" "run" 0 $'25\ntrue\nfalse\n42\n' ""
 # --- Structured unpacking ---
 run_case "unpack_decl" "run" 0 $'10\n20\n[30, 40, 50]\nhello\nworld\n' ""
 
+# --- Guard Statement ---
+run_case "guard_stmt" "run" 0 $'5\n-1\n5\n3\n0\n' ""
+
 # --- Error: missing using io ---
 run_case "error_missing_using_io" "run" 65 "" $'2:3: error: Module \'io\' is not imported. Add \'using io;\' at the top of the file.\n'
 

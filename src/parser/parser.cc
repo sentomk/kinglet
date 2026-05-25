@@ -216,6 +216,9 @@ ast::StmtPtr Parser::statement() {
   if (match(TokenType::IF)) {
     return if_statement();
   }
+  if (match(TokenType::GUARD)) {
+    return guard_statement();
+  }
   if (match(TokenType::WHILE)) {
     return while_statement();
   }
@@ -272,6 +275,16 @@ ast::StmtPtr Parser::while_statement() {
   ast::StmtPtr body = statement();
   return std::make_unique<ast::WhileStmt>(location_of(while_token), std::move(condition),
                                           std::move(body));
+}
+
+ast::StmtPtr Parser::guard_statement() {
+  const Token &guard_token = previous();
+  ast::ExprPtr condition = expression();
+  consume(TokenType::ELSE, "Expected 'else' after guard condition.");
+  consume(TokenType::LEFT_BRACE, "Expected '{' after 'else' in guard statement.");
+  ast::StmtPtr else_body = block_statement();
+  return std::make_unique<ast::GuardStmt>(location_of(guard_token), std::move(condition),
+                                          std::move(else_body));
 }
 
 ast::StmtPtr Parser::for_statement() {

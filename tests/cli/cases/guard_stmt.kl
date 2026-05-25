@@ -1,0 +1,27 @@
+using io;
+
+int safe_div(int a, int b) {
+  guard b != 0 else {
+    return -1;
+  }
+  return a / b;
+}
+
+int abs_val(int x) {
+  guard x != 0 else {
+    return 0;
+  }
+  guard !(x < 0) else {
+    return 0 - x;
+  }
+  return x;
+}
+
+int main() {
+  io::out.line(safe_div(10, 2));
+  io::out.line(safe_div(10, 0));
+  io::out.line(abs_val(5));
+  io::out.line(abs_val(-3));
+  io::out.line(abs_val(0));
+  return 0;
+}

@@ -370,6 +370,7 @@ TokenType Scanner::identifier_type() const {
       {"while", TokenType::WHILE},
       {"break", TokenType::BREAK},
       {"continue", TokenType::CONTINUE},
+      {"guard", TokenType::GUARD},
       {"inspect", TokenType::INSPECT},
       {"when", TokenType::WHEN},
       {"export", TokenType::EXPORT},

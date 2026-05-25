@@ -255,6 +255,16 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
     return;
   }
 
+  if (const auto *guard_stmt = dynamic_cast<const ast::GuardStmt *>(&stmt)) {
+    compile_expr(*guard_stmt->condition);
+    const std::size_t else_jump = emit_jump(OpCode::JmpFalse, guard_stmt->location);
+    const std::size_t skip_jump = emit_jump(OpCode::Jmp, guard_stmt->location);
+    patch_jump(else_jump);
+    compile_stmt(*guard_stmt->else_body);
+    patch_jump(skip_jump);
+    return;
+  }
+
   if (const auto *while_stmt = dynamic_cast<const ast::WhileStmt *>(&stmt)) {
     loop_stack_.emplace_back();
 

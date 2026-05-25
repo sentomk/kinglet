@@ -319,6 +319,15 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     return;
   }
 
+  if (const auto *guard_stmt = dynamic_cast<const ast::GuardStmt *>(&stmt)) {
+    Type cond_type = check_expr(*guard_stmt->condition);
+    if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {
+      error_at(guard_stmt->location, "Guard condition must be Bool or Int.");
+    }
+    check_stmt(*guard_stmt->else_body, expected_return);
+    return;
+  }
+
   if (const auto *while_stmt = dynamic_cast<const ast::WhileStmt *>(&stmt)) {
     Type cond_type = check_expr(*while_stmt->condition);
     if (cond_type.kind != TypeKind::Bool && cond_type.kind != TypeKind::Int) {

@@ -318,6 +318,18 @@ void IfStmt::print(std::ostream &out, int indent) const {
 WhileStmt::WhileStmt(SourceLocation location, ExprPtr condition, StmtPtr body)
     : Stmt(location), condition(std::move(condition)), body(std::move(body)) {}
 
+GuardStmt::GuardStmt(SourceLocation location, ExprPtr condition, StmtPtr else_body)
+    : Stmt(location), condition(std::move(condition)), else_body(std::move(else_body)) {}
+
+void GuardStmt::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(guard";
+  print_child(out, *condition, indent);
+  out << " else";
+  print_child(out, *else_body, indent);
+  out << ")";
+}
+
 void WhileStmt::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
   out << "(while";
