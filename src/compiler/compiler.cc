@@ -748,41 +748,34 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     return;
   }
 
-  if (const auto *inspect_expr = dynamic_cast<const ast::InspectExpr *>(&expr)) {
-    // Compile the inspect value and store it in a temporary local
-    compile_expr(*inspect_expr->value);
+  if (const auto *match_expr = dynamic_cast<const ast::MatchExpr *>(&expr)) {
+    compile_expr(*match_expr->value);
     const uint32_t temp_slot = static_cast<uint32_t>(locals_.size());
-    locals_.push_back(Local{.name = "<inspect_value>", .is_mutable = false});
-    emit_operand(OpCode::StoreLocal, temp_slot, inspect_expr->location);
+    locals_.push_back(Local{.name = "<match_value>", .is_mutable = false});
+    emit_operand(OpCode::StoreLocal, temp_slot, match_expr->location);
 
-    // Compile each arm as an if-else chain
     std::vector<std::size_t> end_jumps;
-    for (const ast::InspectArm &arm : inspect_expr->arms) {
-      // Check if this is a wildcard pattern (identifier "_")
+    for (const ast::MatchArm &arm : match_expr->arms) {
       const auto *identifier = dynamic_cast<const ast::IdentifierExpr *>(arm.pattern.get());
       if (identifier && identifier->name == "_") {
-        // Wildcard pattern - always matches
-        emit(OpCode::Pop, inspect_expr->location);
+        emit(OpCode::Pop, match_expr->location);
         compile_expr(*arm.body);
       } else {
-        // Load the inspect value and compare with the pattern
-        emit_operand(OpCode::LoadLocal, temp_slot, inspect_expr->location);
+        emit_operand(OpCode::LoadLocal, temp_slot, match_expr->location);
         compile_expr(*arm.pattern);
-        emit(OpCode::Eq, inspect_expr->location);
-        const std::size_t next_arm = emit_jump(OpCode::JmpFalse, inspect_expr->location);
-        emit(OpCode::Pop, inspect_expr->location);
+        emit(OpCode::Eq, match_expr->location);
+        const std::size_t next_arm = emit_jump(OpCode::JmpFalse, match_expr->location);
+        emit(OpCode::Pop, match_expr->location);
         compile_expr(*arm.body);
-        end_jumps.push_back(emit_jump(OpCode::Jmp, inspect_expr->location));
+        end_jumps.push_back(emit_jump(OpCode::Jmp, match_expr->location));
         patch_jump(next_arm);
       }
     }
 
-    // Patch all end jumps to point here
     for (std::size_t jump : end_jumps) {
       patch_jump(jump);
     }
 
-    // Remove the temporary local
     locals_.pop_back();
     return;
   }

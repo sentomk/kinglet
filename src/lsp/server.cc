@@ -409,7 +409,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"if else", "if (${1:condition}) {\n\t$2\n} else {\n\t$0\n}", "if-else statement", false},
     {"for", "for (${1:int i = 0}; ${2:i < n}; ${3:i += 1}) {\n\t$0\n}", "for loop", false},
     {"while", "while (${1:condition}) {\n\t$0\n}", "while loop", false},
-    {"inspect", "inspect (${1:expr}) {\n\t${2:_} => ${0:result}\n};", "pattern match", false},
+    {"match", "${1:expr} match {\n\t${2:_} => ${0:result},\n}", "pattern match", false},
     {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration", true},
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition", true},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition", true},
@@ -449,7 +449,7 @@ json::Value Server::handle_completion(const json::Value &params) {
 
   // Control flow keywords
   const char *kw_with_space[] = {"if", "else", "for", "while", "return",
-                                  "inspect", "const", "export", "using",
+                                  "match", "let", "const", "export", "using",
                                   "struct", "enum", "trait", "spawn", "select"};
   const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
   for (const char *kw : kw_with_space) {

@@ -97,8 +97,8 @@ run_case "structs_basic" "run" 0 $'3 4\n10\n' ""
 # --- Enums ---
 run_case "enums_basic" "run" 0 $'green\nnot red\n' ""
 
-# --- Inspect ---
-run_case "inspect_basic" "run" 0 $'zero\none\nother\n' ""
+# --- Match ---
+run_case "match_basic" "run" 0 $'zero\none\nother\n' ""
 
 # --- Generics ---
 run_case "generics_basic" "run" 0 $'42\nhello\n99\nworld\n1 one\n42\n' ""

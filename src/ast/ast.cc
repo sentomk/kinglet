@@ -204,14 +204,14 @@ void CallExpr::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-InspectExpr::InspectExpr(SourceLocation location, ExprPtr value, std::vector<InspectArm> arms)
+MatchExpr::MatchExpr(SourceLocation location, ExprPtr value, std::vector<MatchArm> arms)
     : Expr(location), value(std::move(value)), arms(std::move(arms)) {}
 
-void InspectExpr::print(std::ostream &out, int indent) const {
+void MatchExpr::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
-  out << "(inspect";
+  out << "(match";
   print_child(out, *value, indent);
-  for (const InspectArm &arm : arms) {
+  for (const MatchArm &arm : arms) {
     write_indent(out, indent + 1);
     out << "(arm";
     print_child(out, *arm.pattern, indent + 1);

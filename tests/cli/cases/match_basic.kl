@@ -1,7 +1,7 @@
 using io;
 
 string describe(int x) {
-  return inspect x {
+  return x match {
     0 => "zero",
     1 => "one",
     _ => "other",

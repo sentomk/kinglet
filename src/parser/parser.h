@@ -57,7 +57,7 @@ private:
   ast::ExprPtr unary();
   ast::ExprPtr call();
   ast::ExprPtr primary();
-  ast::ExprPtr match_expression();
+  ast::ExprPtr match_expression(ast::ExprPtr value);
 
   ast::ExprPtr condition_expression();
   std::vector<ast::Parameter> parameters();

@@ -656,6 +656,8 @@ ast::ExprPtr Parser::call() {
       consume(TokenType::RIGHT_BRACKET, "Expected ']' after index.");
       const ast::SourceLocation location = expr->location;
       expr = std::make_unique<ast::IndexExpr>(location, std::move(expr), std::move(index));
+    } else if (match(TokenType::MATCH)) {
+      expr = match_expression(std::move(expr));
     } else {
       break;
     }
@@ -664,9 +666,6 @@ ast::ExprPtr Parser::call() {
 }
 
 ast::ExprPtr Parser::primary() {
-  if (match(TokenType::INSPECT)) {
-    return match_expression();
-  }
   if (match(TokenType::INTEGER)) {
     const Token &literal = previous();
     return std::make_unique<ast::IntLiteralExpr>(location_of(literal), literal.int_value);
@@ -759,24 +758,23 @@ ast::ExprPtr Parser::condition_expression() {
   return expression();
 }
 
-ast::ExprPtr Parser::match_expression() {
-  const Token &inspect_token = previous();
-  ast::ExprPtr value = expression();
-  consume(TokenType::LEFT_BRACE, "Expected '{' after inspect expression.");
-  
-  std::vector<ast::InspectArm> arms;
+ast::ExprPtr Parser::match_expression(ast::ExprPtr value) {
+  const Token &match_token = previous();
+  consume(TokenType::LEFT_BRACE, "Expected '{' after 'match'.");
+
+  std::vector<ast::MatchArm> arms;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
     ast::ExprPtr pattern = expression();
-    consume(TokenType::FAT_ARROW, "Expected '=>' after inspect pattern.");
+    consume(TokenType::FAT_ARROW, "Expected '=>' after match pattern.");
     ast::ExprPtr body = expression();
-    arms.push_back(ast::InspectArm{std::move(pattern), std::move(body)});
+    arms.push_back(ast::MatchArm{std::move(pattern), std::move(body)});
     if (!check(TokenType::RIGHT_BRACE)) {
-      consume(TokenType::COMMA, "Expected ',' after inspect arm.");
+      consume(TokenType::COMMA, "Expected ',' after match arm.");
     }
   }
-  consume(TokenType::RIGHT_BRACE, "Expected '}' after inspect arms.");
-  return std::make_unique<ast::InspectExpr>(location_of(inspect_token), std::move(value),
-                                            std::move(arms));
+  consume(TokenType::RIGHT_BRACE, "Expected '}' after match arms.");
+  return std::make_unique<ast::MatchExpr>(location_of(match_token), std::move(value),
+                                          std::move(arms));
 }
 
 std::vector<ast::Parameter> Parser::parameters() {

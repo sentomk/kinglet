@@ -159,17 +159,17 @@ struct CallExpr final : Expr {
   std::vector<ExprPtr> args;
 };
 
-struct InspectArm {
+struct MatchArm {
   ExprPtr pattern;
   ExprPtr body;
 };
 
-struct InspectExpr final : Expr {
-  InspectExpr(SourceLocation location, ExprPtr value, std::vector<InspectArm> arms);
+struct MatchExpr final : Expr {
+  MatchExpr(SourceLocation location, ExprPtr value, std::vector<MatchArm> arms);
   void print(std::ostream &out, int indent = 0) const override;
 
   ExprPtr value;
-  std::vector<InspectArm> arms;
+  std::vector<MatchArm> arms;
 };
 
 struct ExprStmt final : Stmt {

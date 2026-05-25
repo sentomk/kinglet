@@ -885,10 +885,10 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     return callee_type.return_type ? *callee_type.return_type : int_type();
   }
 
-  if (const auto *inspect_expr = dynamic_cast<const ast::InspectExpr *>(&expr)) {
-    Type value_type = check_expr(*inspect_expr->value);
+  if (const auto *match_expr = dynamic_cast<const ast::MatchExpr *>(&expr)) {
+    Type value_type = check_expr(*match_expr->value);
     Type result_type = null_type();
-    for (const ast::InspectArm &arm : inspect_expr->arms) {
+    for (const ast::MatchArm &arm : match_expr->arms) {
       Type pattern_type = check_expr(*arm.pattern);
       if (pattern_type.kind != TypeKind::Null && !pattern_type.is_compatible_with(value_type)) {
         error_at(arm.pattern->location, "Pattern type " + type_to_string(pattern_type) +

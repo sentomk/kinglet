@@ -38,8 +38,10 @@ const char *token_type_name(TokenType type) {
     return "CONTINUE";
   case TokenType::GUARD:
     return "GUARD";
-  case TokenType::INSPECT:
-    return "INSPECT";
+  case TokenType::MATCH:
+    return "MATCH";
+  case TokenType::LET:
+    return "LET";
   case TokenType::WHEN:
     return "WHEN";
   case TokenType::IMPORT:
