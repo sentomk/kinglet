@@ -409,7 +409,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"if else", "if (${1:condition}) {\n\t$2\n} else {\n\t$0\n}", "if-else statement", false},
     {"for", "for (${1:int i = 0}; ${2:i < n}; ${3:i += 1}) {\n\t$0\n}", "for loop", false},
     {"while", "while (${1:condition}) {\n\t$0\n}", "while loop", false},
-    {"match", "${1:expr} match {\n\t${2:_} => ${0:result},\n}", "pattern match", false},
+    {"match", "match {\n\t${1:_} => ${0:result},\n}", "pattern match", false},
     {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration", true},
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition", true},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition", true},
@@ -427,8 +427,27 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
+  bool has_expr_before_cursor = false;
+  {
+    std::size_t cursor_col = static_cast<std::size_t>(character);
+    std::size_t prefix_start = cursor_col > prefix.size() ? cursor_col - prefix.size() : 0;
+    for (std::size_t i = 0; i < prefix_start; ++i) {
+      if (!std::isspace(static_cast<unsigned char>(line_text[i]))) {
+        has_expr_before_cursor = true;
+        break;
+      }
+    }
+  }
+
   for (const auto &s : snippets) {
     if (!prefix.empty() && std::string(s.label).find(prefix) == std::string::npos) continue;
+    if (std::string(s.label) == "match") {
+      const char *body = has_expr_before_cursor
+          ? "match {\n\t${1:_} => ${0:result}\n};"
+          : "${1:expr} match {\n\t${2:_} => ${0:result}\n};";
+      items.push_back(protocol::completion_item(s.label, 15, s.detail, body, 2));
+      continue;
+    }
     if (s.is_decl) {
       items.push_back(protocol::snippet_item_with_edit(
           s.label, 15, s.detail, s.body, line, line_start, character));
