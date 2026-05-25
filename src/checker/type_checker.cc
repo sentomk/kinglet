@@ -213,7 +213,18 @@ void TypeChecker::check_function(const ast::FunctionDecl &function) {
   }
 
   if (function.body) {
+    implicit_return_stmt_ = nullptr;
+    if (return_type.kind != TypeKind::Void) {
+      if (const auto *block = dynamic_cast<const ast::BlockStmt *>(function.body.get())) {
+        if (!block->statements.empty()) {
+          if (const auto *last_expr = dynamic_cast<const ast::ExprStmt *>(block->statements.back().get())) {
+            implicit_return_stmt_ = last_expr;
+          }
+        }
+      }
+    }
     check_stmt(*function.body, return_type);
+    implicit_return_stmt_ = nullptr;
   }
 
   pop_scope();
@@ -290,7 +301,13 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
     Type result_type = check_expr(*expr_stmt->expr);
     if (result_type.kind != TypeKind::Void) {
       bool suppress = false;
+      if (expr_stmt == implicit_return_stmt_)
+        suppress = true;
       if (dynamic_cast<const ast::AssignExpr *>(expr_stmt->expr.get()))
+        suppress = true;
+      if (dynamic_cast<const ast::FieldAssignExpr *>(expr_stmt->expr.get()))
+        suppress = true;
+      if (dynamic_cast<const ast::IndexAssignExpr *>(expr_stmt->expr.get()))
         suppress = true;
       if (const auto *call = dynamic_cast<const ast::CallExpr *>(expr_stmt->expr.get())) {
         if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call->callee.get())) {
@@ -302,6 +319,10 @@ void TypeChecker::check_stmt(const ast::Stmt &stmt, const Type &expected_return)
             if (ns->namespace_name == "io" && (ns->member_name == "out" || ns->member_name == "err"))
               suppress = true;
           }
+          const std::string &m = fa->field_name;
+          if (m == "push" || m == "pop" || m == "remove" || m == "clear" ||
+              m == "insert" || m == "reverse" || m == "line")
+            suppress = true;
         }
       }
       if (!suppress)
