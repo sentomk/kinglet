@@ -126,6 +126,9 @@ run_case "chained_comparisons" "run" 0 $'in rangenot smalledge' ""
 # --- Pipeline Operator ---
 run_case "pipeline" "run" 0 $'5 |> twice |> add_one = 11\n3 |> add_one |> twice |> negate = -8\n' ""
 
+# --- Error: missing using io ---
+run_case "error_missing_using_io" "run" 65 "" $'2:3: error: Module \'io\' is not imported. Add \'using io;\' at the top of the file.\n'
+
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2
   exit 1

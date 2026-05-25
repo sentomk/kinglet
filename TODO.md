@@ -7,11 +7,11 @@
 - [x] I/O API design: decide whether `io::in(prompt)` remains as shorthand for `io::in.line(prompt)`
 - [x] LSP diagnostics: wider underlines, document symbols, signature help
 - [x] LSP diagnostics: surface compiler warnings (unreachable code, unused vars, constant conditions)
-- [ ] Error message improvements (suggest `using io;` when `io::` used without it)
+- [x] Error message improvements (suggest `using io;` when `io::` used without it)
 
 ## P1: Syntax & Expressiveness (WG21-inspired)
 
-- [ ] Array methods: `len()`, `push()`, `pop()`, `remove()`, `contains()`, `clear()`
+- [x] Array methods: `len()`, `push()`, `pop()`, `remove()`, `contains()`, `clear()`
 - [x] Chained comparisons (P0893): `1 <= x <= 10` → parser desugars to `&&`
 - [x] Pipeline operator (P2011): `data |> filter |> map |> sum`
 - [ ] Implicit return (P0927): last expression in block is the return value

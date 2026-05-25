@@ -366,6 +366,11 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
 
   if (const auto *ns_access = dynamic_cast<const ast::NamespaceAccessExpr *>(&expr)) {
     if (ns_access->namespace_name == "io") {
+      if (used_.count("io") == 0) {
+        error_at(ns_access->location,
+                 "Module 'io' is not imported. Add 'using io;' at the top of the file.");
+        return void_type();
+      }
       if (ns_access->member_name == "out" || ns_access->member_name == "err") {
         return void_type();
       }
@@ -496,8 +501,12 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
 
     const auto *ns_callee =
         dynamic_cast<const ast::NamespaceAccessExpr *>(call_expr->callee.get());
-    if (ns_callee && used_.count(ns_callee->namespace_name) != 0 &&
-        ns_callee->namespace_name == "io") {
+    if (ns_callee && ns_callee->namespace_name == "io") {
+      if (used_.count("io") == 0) {
+        error_at(ns_callee->location,
+                 "Module 'io' is not imported. Add 'using io;' at the top of the file.");
+        return void_type();
+      }
       if (ns_callee->member_name == "out" || ns_callee->member_name == "err") {
         for (const ast::ExprPtr &arg : call_expr->args) {
           check_expr(*arg);
@@ -532,6 +541,13 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
           }
           return string_type();
         }
+      }
+      if (ns_obj && used_.count(ns_obj->namespace_name) == 0) {
+        error_at(ns_obj->location,
+                 "Module '" + ns_obj->namespace_name +
+                     "' is not imported. Add 'using " + ns_obj->namespace_name +
+                     ";' at the top of the file.");
+        return void_type();
       }
     }
 
@@ -685,6 +701,16 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
 
     Type callee_type = check_expr(*call_expr->callee);
     if (callee_type.kind != TypeKind::Function) {
+      if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call_expr->callee.get());
+          ns && used_.count(ns->namespace_name) == 0) {
+        return void_type();
+      }
+      if (const auto *fa = dynamic_cast<const ast::FieldAccessExpr *>(call_expr->callee.get())) {
+        if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(fa->object.get());
+            ns && used_.count(ns->namespace_name) == 0) {
+          return void_type();
+        }
+      }
       error_at(call_expr->location, "Cannot call non-function type.");
       return int_type();
     }
@@ -787,6 +813,10 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       return int_type();
     }
     if (obj_type.kind != TypeKind::Struct) {
+      if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(field_access->object.get());
+          ns && used_.count(ns->namespace_name) == 0) {
+        return void_type();
+      }
       error_at(field_access->location, "Cannot access field on non-struct type.");
       return int_type();
     }

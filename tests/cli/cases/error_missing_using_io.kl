@@ -1,0 +1,4 @@
+int main() {
+  io::out("hello");
+  return 0;
+}

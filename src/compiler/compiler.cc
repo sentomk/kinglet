@@ -720,7 +720,12 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     if (used_.count(ns_access->namespace_name) != 0) {
       return;
     }
-    error_at(ns_access->location, "Unknown namespace '" + ns_access->namespace_name + "'.");
+    if (ns_access->namespace_name == "io") {
+      error_at(ns_access->location,
+               "Module 'io' is not imported. Add 'using io;' at the top of the file.");
+    } else {
+      error_at(ns_access->location, "Unknown namespace '" + ns_access->namespace_name + "'.");
+    }
     return;
   }
 
