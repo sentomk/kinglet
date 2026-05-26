@@ -2,6 +2,9 @@
 
 #include "checker/type_checker.h"
 #include "lexer/scanner.h"
+#include "module/module_loader.h"
+
+#include <filesystem>
 
 namespace kinglet::lsp {
 
@@ -132,7 +135,7 @@ const Symbol *SymbolTable::find_definition(const std::string &name, int line) co
   return best;
 }
 
-AnalysisResult analyze(const std::string &source) {
+AnalysisResult analyze(const std::string &source, const std::string &file_path) {
   AnalysisResult result;
 
   Scanner scanner(source);
@@ -155,7 +158,7 @@ AnalysisResult analyze(const std::string &source) {
     result.diagnostics.push_back({err.line, err.column, 1, err.message, 1});
   }
 
-  // Collect using declarations even with parse errors (for completion)
+  // Collect using and import declarations even with parse errors (for completion)
   if (parse_result.program) {
     for (const auto &decl : parse_result.program->declarations) {
       if (const auto *u = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
@@ -163,6 +166,12 @@ AnalysisResult analyze(const std::string &source) {
         if (u->is_namespace) {
           result.opened_namespaces.insert(u->namespace_name);
         }
+      }
+      if (const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get())) {
+        std::string ns = imp->alias.empty()
+            ? std::filesystem::path(imp->path).stem().string()
+            : imp->alias;
+        result.imported_namespaces.insert(ns);
       }
     }
   }
@@ -176,7 +185,16 @@ AnalysisResult analyze(const std::string &source) {
     return result;
   }
 
+  // Set up ModuleLoader for import resolution
+  std::unique_ptr<ModuleLoader> module_loader;
+  if (!file_path.empty()) {
+    std::filesystem::path p(file_path);
+    std::string base_dir = p.has_parent_path() ? p.parent_path().string() : ".";
+    module_loader = std::make_unique<ModuleLoader>(base_dir);
+  }
+
   TypeChecker checker;
+  if (module_loader) checker.set_module_loader(module_loader.get());
   auto type_result = checker.check(*parse_result.program);
   for (const auto &err : type_result.errors) {
     result.diagnostics.push_back({err.location.line, err.location.column, err.location.length, err.message, static_cast<int>(err.severity)});

@@ -53,9 +53,10 @@ struct AnalysisResult {
   SymbolTable symbols;
   std::set<std::string> used_namespaces;
   std::set<std::string> opened_namespaces;
+  std::set<std::string> imported_namespaces;
   bool valid = false;
 };
 
-AnalysisResult analyze(const std::string &source);
+AnalysisResult analyze(const std::string &source, const std::string &file_path = "");
 
 } // namespace kinglet::lsp

@@ -178,9 +178,17 @@ void Server::handle_did_close(const json::Value &params) {
 }
 // PLACEHOLDER_HANDLERS_CONTINUE
 
+static std::string uri_to_path(const std::string &uri) {
+  const std::string prefix = "file://";
+  if (uri.compare(0, prefix.size(), prefix) == 0) {
+    return uri.substr(prefix.size());
+  }
+  return uri;
+}
+
 void Server::ensure_analyzed(Document &doc) {
   if (!doc.dirty) return;
-  doc.analysis = analyze(doc.text);
+  doc.analysis = analyze(doc.text, uri_to_path(doc.uri));
   doc.dirty = false;
 }
 
