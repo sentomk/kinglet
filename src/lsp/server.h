@@ -26,6 +26,7 @@ private:
   json::Value handle_hover(const json::Value &params);
   json::Value handle_document_symbol(const json::Value &params);
   json::Value handle_signature_help(const json::Value &params);
+  json::Value handle_semantic_tokens(const json::Value &params);
 
   void publish_diagnostics(Document &doc);
   void ensure_analyzed(Document &doc);

@@ -1,5 +1,6 @@
 #include "lsp/server.h"
 
+#include "lexer/scanner.h"
 #include "lsp/protocol.h"
 
 #include <cctype>
@@ -54,6 +55,8 @@ void Server::handle_message(const json::Value &msg) {
     send_response(id, handle_document_symbol(params));
   } else if (method == "textDocument/signatureHelp") {
     send_response(id, handle_signature_help(params));
+  } else if (method == "textDocument/semanticTokens/full") {
+    send_response(id, handle_semantic_tokens(params));
 // PLACEHOLDER_SERVER_CONTINUE
   } else if (method == "shutdown") {
     send_response(id, json::Value::null());
@@ -103,6 +106,21 @@ json::Value Server::handle_initialize(const json::Value &) {
   sig_trigger_chars.push_back(json::Value::string(","));
   sig_help["triggerCharacters"] = json::Value(sig_trigger_chars);
   capabilities["signatureHelpProvider"] = json::Value(sig_help);
+
+  // Semantic tokens
+  json::Object sem_tokens;
+  json::Object sem_legend;
+  json::Array token_types;
+  for (const char *t : {"keyword", "function", "type", "enum", "enumMember",
+                         "variable", "parameter", "string", "number", "comment",
+                         "operator", "namespace"}) {
+    token_types.push_back(json::Value::string(t));
+  }
+  sem_legend["tokenTypes"] = json::Value(token_types);
+  sem_legend["tokenModifiers"] = json::Value(json::Array{});
+  sem_tokens["legend"] = json::Value(sem_legend);
+  sem_tokens["full"] = json::Value(true);
+  capabilities["semanticTokensProvider"] = json::Value(sem_tokens);
 
   json::Object server_info;
   server_info["name"] = json::Value::string("kinglet");
@@ -951,6 +969,114 @@ std::string Server::get_full_word_at(const std::string &text, int line, int char
 
   if (start == end) return "";
   return text.substr(start, end - start);
+}
+
+json::Value Server::handle_semantic_tokens(const json::Value &params) {
+  std::string uri = uri_from_params(params);
+  auto *doc = store_.get(uri);
+  if (!doc) {
+    json::Object result;
+    result["data"] = json::Value(json::Array{});
+    return json::Value(result);
+  }
+
+  ensure_analyzed(*doc);
+
+  // Token type indices (must match legend order)
+  enum TT { Keyword=0, Function=1, Type=2, Enum=3, EnumMember=4,
+            Variable=5, Parameter=6, String=7, Number=8, Comment=9,
+            Operator=10, Namespace=11 };
+
+  // Build a set of known type/enum/function names for classification
+  std::set<std::string> type_names;
+  std::set<std::string> enum_names;
+  std::set<std::string> func_names;
+  for (const auto &sym : doc->analysis.symbols.symbols) {
+    if (sym.kind == SymbolKind::Struct) type_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Enum) enum_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Function) func_names.insert(sym.name);
+  }
+
+  // Scan tokens
+  kinglet::Scanner scanner(doc->text);
+  auto tokens = scanner.scan_tokens();
+
+  json::Array data;
+  int prev_line = 0;
+  int prev_start = 0;
+
+  for (const auto &tok : tokens) {
+    if (tok.type == TokenType::END_OF_FILE || tok.type == TokenType::ERROR) continue;
+    if (tok.lexeme.empty()) continue;
+
+    int token_type = -1;
+
+    switch (tok.type) {
+    case TokenType::AUTO: case TokenType::INT: case TokenType::FLOAT:
+    case TokenType::DOUBLE: case TokenType::BOOL: case TokenType::STRING:
+    case TokenType::VOID: case TokenType::BYTE: case TokenType::CONST:
+    case TokenType::RETURN: case TokenType::IF: case TokenType::ELSE:
+    case TokenType::FOR: case TokenType::WHILE: case TokenType::BREAK:
+    case TokenType::CONTINUE: case TokenType::GUARD: case TokenType::MATCH:
+    case TokenType::LET: case TokenType::WHEN: case TokenType::IMPORT:
+    case TokenType::EXPORT: case TokenType::NAMESPACE: case TokenType::USING:
+    case TokenType::STRUCT: case TokenType::ENUM: case TokenType::TRAIT:
+    case TokenType::SPAWN: case TokenType::SELECT: case TokenType::TRUE:
+    case TokenType::FALSE: case TokenType::NULL_:
+      token_type = TT::Keyword;
+      break;
+    case TokenType::STRING_LIT:
+      token_type = TT::String;
+      break;
+    case TokenType::INTEGER: case TokenType::FLOAT_LIT: case TokenType::CHAR_LIT:
+      token_type = TT::Number;
+      break;
+    case TokenType::PLUS: case TokenType::MINUS: case TokenType::STAR:
+    case TokenType::SLASH: case TokenType::PERCENT: case TokenType::EQUAL:
+    case TokenType::EQUAL_EQUAL: case TokenType::BANG_EQUAL:
+    case TokenType::LESS: case TokenType::GREATER:
+    case TokenType::LESS_EQUAL: case TokenType::GREATER_EQUAL:
+    case TokenType::AMP_AMP: case TokenType::PIPE_PIPE: case TokenType::BANG:
+    case TokenType::AMP: case TokenType::PIPE: case TokenType::CARET:
+    case TokenType::TILDE: case TokenType::PIPE_GREATER:
+    case TokenType::FAT_ARROW: case TokenType::ARROW:
+      token_type = TT::Operator;
+      break;
+    case TokenType::IDENTIFIER: {
+      std::string name(tok.lexeme);
+      if (type_names.count(name)) token_type = TT::Type;
+      else if (enum_names.count(name)) token_type = TT::Enum;
+      else if (func_names.count(name)) token_type = TT::Function;
+      else if (name == "io") token_type = TT::Namespace;
+      else token_type = TT::Variable;
+      break;
+    }
+    default:
+      break;
+    }
+
+    if (token_type < 0) continue;
+
+    int tok_line = tok.line - 1;
+    int tok_col = tok.column - 1;
+    int length = static_cast<int>(tok.lexeme.size());
+
+    int delta_line = tok_line - prev_line;
+    int delta_start = (delta_line == 0) ? (tok_col - prev_start) : tok_col;
+
+    data.push_back(json::Value::number(delta_line));
+    data.push_back(json::Value::number(delta_start));
+    data.push_back(json::Value::number(length));
+    data.push_back(json::Value::number(token_type));
+    data.push_back(json::Value::number(0));
+
+    prev_line = tok_line;
+    prev_start = tok_col;
+  }
+
+  json::Object result;
+  result["data"] = json::Value(data);
+  return json::Value(result);
 }
 
 } // namespace kinglet::lsp
