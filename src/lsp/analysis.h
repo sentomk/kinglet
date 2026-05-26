@@ -5,6 +5,7 @@
 
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace kinglet::lsp {
@@ -54,6 +55,7 @@ struct AnalysisResult {
   std::set<std::string> used_namespaces;
   std::set<std::string> opened_namespaces;
   std::set<std::string> imported_namespaces;
+  std::unordered_map<std::string, std::vector<Symbol>> imported_symbols;
   bool valid = false;
 };
 

@@ -200,6 +200,62 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
     result.diagnostics.push_back({err.location.line, err.location.column, err.location.length, err.message, static_cast<int>(err.severity)});
   }
 
+  // Collect symbols from imported modules (cached by ModuleLoader)
+  if (module_loader) {
+    for (const auto &decl : parse_result.program->declarations) {
+      const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get());
+      if (!imp) continue;
+      auto load_result = module_loader->load(imp->path);
+      if (!load_result.module) continue;
+      const auto &mod = *load_result.module;
+      std::string ns = imp->alias.empty() ? mod.namespace_name : imp->alias;
+
+      auto &syms = result.imported_symbols[ns];
+
+      for (const auto *fn : mod.public_functions) {
+        if (!imp->selected_symbols.empty()) {
+          bool found = false;
+          for (const auto &s : imp->selected_symbols) {
+            if (s == fn->name) { found = true; break; }
+          }
+          if (!found) continue;
+        }
+        Symbol sym;
+        sym.name = fn->name;
+        sym.kind = SymbolKind::Function;
+        sym.return_type = fn->return_type.to_string();
+        sym.params = fn->params;
+        sym.location = imp->location;
+        syms.push_back(std::move(sym));
+      }
+      for (const auto *sd : mod.public_structs) {
+        if (!imp->selected_symbols.empty()) continue;
+        Symbol sym;
+        sym.name = sd->name;
+        sym.kind = SymbolKind::Struct;
+        sym.type_name = "struct";
+        sym.location = imp->location;
+        for (const auto &field : sd->fields) {
+          sym.fields.push_back(FieldSymbol{field.name, field.type.to_string()});
+        }
+        syms.push_back(std::move(sym));
+      }
+      for (const auto *ed : mod.public_enums) {
+        if (!imp->selected_symbols.empty()) continue;
+        Symbol sym;
+        sym.name = ed->name;
+        sym.kind = SymbolKind::Enum;
+        sym.type_name = "enum";
+        sym.location = imp->location;
+        for (const auto &v : ed->variants) {
+          sym.variants.push_back(v.name);
+          sym.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));
+        }
+        syms.push_back(std::move(sym));
+      }
+    }
+  }
+
   SymbolCollector collector;
   collector.collect(*parse_result.program);
   result.symbols = collector.take();

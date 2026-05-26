@@ -259,6 +259,37 @@ json::Value Server::handle_completion(const json::Value &params) {
     return json::Value(items);
   }
 
+  if (doc->analysis.imported_namespaces.count(ns_name)) {
+    auto it = doc->analysis.imported_symbols.find(ns_name);
+    if (it != doc->analysis.imported_symbols.end()) {
+      for (const auto &sym : it->second) {
+        int kind = 6;
+        if (sym.kind == SymbolKind::Function) kind = 3;
+        else if (sym.kind == SymbolKind::Struct) kind = 22;
+        else if (sym.kind == SymbolKind::Enum) kind = 13;
+        std::string detail = sym.type_name;
+        if (sym.kind == SymbolKind::Function) {
+          detail = sym.return_type + " " + sym.name + "(";
+          for (std::size_t i = 0; i < sym.params.size(); ++i) {
+            if (i > 0) detail += ", ";
+            detail += sym.params[i].type.to_string() + " " + sym.params[i].name;
+          }
+          detail += ")";
+          std::string snippet = sym.name + "(";
+          for (std::size_t i = 0; i < sym.params.size(); ++i) {
+            if (i > 0) snippet += ", ";
+            snippet += "${" + std::to_string(i + 1) + ":" + sym.params[i].name + "}";
+          }
+          snippet += ")";
+          items.push_back(protocol::completion_item(sym.name, kind, detail, snippet, 2));
+        } else {
+          items.push_back(protocol::completion_item(sym.name, kind, detail));
+        }
+      }
+      return json::Value(items);
+    }
+  }
+
   if (!ns_name.empty()) {
     auto visible = doc->analysis.symbols.visible_at(line + 1);
     for (const auto *sym : visible) {
