@@ -63,6 +63,13 @@ private:
   std::unordered_map<std::string, const ast::StructDecl *> generic_structs_;
   std::unordered_map<std::string, const ast::FunctionDecl *> generic_functions_;
   std::unordered_set<std::string> instantiated_;
+
+  struct MethodInfo {
+    const ast::FunctionDecl *decl;
+    std::string target_type;
+  };
+  std::unordered_map<std::string, MethodInfo> method_registry_;
+
   std::vector<TypeError> errors_;
   std::unordered_set<std::string> used_;    // using io;
   std::unordered_set<std::string> opened_;  // using namespace io;

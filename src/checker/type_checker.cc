@@ -186,6 +186,13 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       func_type.return_type = std::make_unique<Type>(return_type);
       declare_var(func->name, func_type, false);
     }
+    if (const auto *impl_decl = dynamic_cast<const ast::ImplDecl *>(decl.get())) {
+      for (const auto &method : impl_decl->methods) {
+        std::string key = impl_decl->target_type + "::" + method->name;
+        method_registry_[key] = MethodInfo{method.get(), impl_decl->target_type};
+      }
+      continue;
+    }
     if (const auto *import_decl = dynamic_cast<const ast::ImportDecl *>(decl.get())) {
       // Check for duplicate symbols in selective import
       if (!import_decl->selected_symbols.empty()) {
@@ -1214,6 +1221,18 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         }
         return Type(f.type_kind);
       }
+    }
+    std::string method_key = obj_type.name + "::" + field_access->field_name;
+    auto method_it = method_registry_.find(method_key);
+    if (method_it != method_registry_.end()) {
+      const auto *method_decl = method_it->second.decl;
+      Type fn(TypeKind::Function);
+      fn.return_type = std::make_unique<Type>(resolve_type_expr(method_decl->return_type));
+      for (const auto &param : method_decl->params) {
+        if (param.name == "self") continue;
+        fn.param_types.push_back(resolve_type_expr(param.type));
+      }
+      return fn;
     }
     error_at(field_access->location, "Struct '" + obj_type.name + "' has no field '" +
                                          field_access->field_name + "'.");
