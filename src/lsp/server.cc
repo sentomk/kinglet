@@ -4,6 +4,7 @@
 #include "lsp/protocol.h"
 
 #include <cctype>
+#include <filesystem>
 #include <iostream>
 #include <set>
 #include <sstream>
@@ -223,6 +224,33 @@ json::Value Server::handle_completion(const json::Value &params) {
   while (std::getline(stream, l)) {
     if (cur_line == line) { line_text = l; break; }
     ++cur_line;
+  }
+
+  // File name completion inside import "..."
+  {
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    auto import_pos = before_cursor.rfind("import");
+    if (import_pos != std::string::npos) {
+      auto quote_pos = before_cursor.find('"', import_pos);
+      if (quote_pos != std::string::npos && static_cast<int>(quote_pos) < character) {
+        auto close_pos = before_cursor.find('"', quote_pos + 1);
+        if (close_pos == std::string::npos || static_cast<int>(close_pos) >= character) {
+          std::string file_prefix = before_cursor.substr(quote_pos + 1);
+          std::string base_dir = std::filesystem::path(uri_to_path(uri)).parent_path().string();
+          std::error_code ec;
+          for (const auto &entry : std::filesystem::directory_iterator(base_dir, ec)) {
+            if (!entry.is_regular_file()) continue;
+            std::string filename = entry.path().filename().string();
+            if (filename.size() < 3 || filename.substr(filename.size() - 3) != ".kl") continue;
+            if (!file_prefix.empty() && filename.find(file_prefix) == std::string::npos) continue;
+            items.push_back(protocol::completion_item_with_edit(
+                filename, 17, entry.path().string(), line,
+                static_cast<int>(quote_pos) + 1, character));
+          }
+          if (!items.empty()) return json::Value(items);
+        }
+      }
+    }
   }
 
   bool in_pipeline = false;
