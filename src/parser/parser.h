@@ -35,6 +35,7 @@ private:
   ast::DeclPtr struct_declaration();
   ast::DeclPtr enum_declaration();
   ast::DeclPtr impl_declaration();
+  ast::DeclPtr trait_declaration();
   ast::StmtPtr statement();
   ast::StmtPtr block_statement();
   ast::StmtPtr return_statement();

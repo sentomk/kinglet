@@ -136,6 +136,15 @@ ast::DeclPtr Parser::declaration() {
     return decl;
   }
 
+  if (match(TokenType::TRAIT)) {
+    auto decl = trait_declaration();
+    if (decl) {
+      auto *td = static_cast<ast::TraitDecl *>(decl.get());
+      td->is_public = is_public;
+    }
+    return decl;
+  }
+
   if (is_function_declaration_start()) {
     auto decl = function_declaration();
     if (decl) {
@@ -146,7 +155,7 @@ ast::DeclPtr Parser::declaration() {
   }
 
   if (is_public) {
-    error_at(peek(), "'pub' can only be used before function, struct, enum, or impl declarations.");
+    error_at(peek(), "'pub' can only be used before function, struct, enum, impl, or trait declarations.");
   }
 
   ast::StmtPtr stmt = statement();
@@ -297,6 +306,48 @@ ast::DeclPtr Parser::impl_declaration() {
 
   return std::make_unique<ast::ImplDecl>(location_of(impl_token), std::move(target_type),
                                          std::move(trait_name), std::move(methods));
+}
+
+ast::DeclPtr Parser::trait_declaration() {
+  const Token &trait_token = previous();
+  const Token &name_token = consume(TokenType::IDENTIFIER, "Expected trait name after 'trait'.");
+  std::string name = token_text(name_token);
+
+  consume(TokenType::LEFT_BRACE, "Expected '{' after trait name.");
+
+  std::vector<ast::TraitMethodDecl> methods;
+  while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+    ast::TypeExpr return_type = parse_type_expr();
+    const Token &method_name = consume(TokenType::IDENTIFIER, "Expected method name.");
+    consume(TokenType::LEFT_PAREN, "Expected '(' after method name.");
+
+    std::vector<ast::Parameter> params;
+    if (match(TokenType::SELF)) {
+      params.push_back(ast::Parameter{ast::TypeExpr{"Self", {}}, "self"});
+      if (check(TokenType::COMMA)) advance();
+    }
+    if (!check(TokenType::RIGHT_PAREN)) {
+      auto rest = parameters();
+      params.insert(params.end(), std::make_move_iterator(rest.begin()),
+                    std::make_move_iterator(rest.end()));
+    }
+    consume(TokenType::RIGHT_PAREN, "Expected ')' after parameter list.");
+
+    ast::StmtPtr default_body;
+    if (check(TokenType::LEFT_BRACE) || check(TokenType::FAT_ARROW)) {
+      default_body = function_body();
+    } else {
+      consume(TokenType::SEMICOLON, "Expected ';' or '{' after method signature.");
+    }
+
+    methods.push_back(ast::TraitMethodDecl{
+        std::move(return_type), token_text(method_name), std::move(params),
+        std::move(default_body)});
+  }
+  consume(TokenType::RIGHT_BRACE, "Expected '}' after trait body.");
+
+  return std::make_unique<ast::TraitDecl>(location_of(trait_token), std::move(name),
+                                          std::move(methods));
 }
 
 ast::DeclPtr Parser::function_declaration() {

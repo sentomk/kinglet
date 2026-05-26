@@ -580,6 +580,27 @@ void EnumDecl::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
+TraitDecl::TraitDecl(SourceLocation location, std::string name,
+                     std::vector<TraitMethodDecl> methods)
+    : Decl(location), name(std::move(name)), methods(std::move(methods)) {}
+
+void TraitDecl::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(trait " << name;
+  for (const auto &m : methods) {
+    write_indent(out, indent + 1);
+    out << "(method " << m.return_type.to_string() << " " << m.name;
+    for (const auto &p : m.params) {
+      out << " " << p.type.to_string() << " " << p.name;
+    }
+    if (m.default_body) {
+      print_child(out, *m.default_body, indent + 1);
+    }
+    out << ")";
+  }
+  out << ")";
+}
+
 ImplDecl::ImplDecl(SourceLocation location, std::string target_type, std::string trait_name,
                    std::vector<std::unique_ptr<FunctionDecl>> methods)
     : Decl(location), target_type(std::move(target_type)), trait_name(std::move(trait_name)),
