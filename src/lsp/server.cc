@@ -237,12 +237,15 @@ json::Value Server::handle_completion(const json::Value &params) {
         auto close_pos = before_cursor.find('"', quote_pos + 1);
         if (close_pos == std::string::npos || static_cast<int>(close_pos) >= character) {
           std::string file_prefix = before_cursor.substr(quote_pos + 1);
-          std::string base_dir = std::filesystem::path(uri_to_path(uri)).parent_path().string();
+          std::filesystem::path current_path = uri_to_path(uri);
+          std::string current_name = current_path.filename().string();
+          std::string base_dir = current_path.parent_path().string();
           std::error_code ec;
           for (const auto &entry : std::filesystem::directory_iterator(base_dir, ec)) {
             if (!entry.is_regular_file()) continue;
             std::string filename = entry.path().filename().string();
             if (filename.size() < 3 || filename.substr(filename.size() - 3) != ".kl") continue;
+            if (filename == current_name) continue;  // skip self
             if (!file_prefix.empty() && filename.find(file_prefix) == std::string::npos) continue;
             items.push_back(protocol::completion_item_with_edit(
                 filename, 17, entry.path().string(), line,
