@@ -184,7 +184,7 @@ ast::DeclPtr Parser::import_declaration() {
     consume(TokenType::RIGHT_BRACE, "Expected '}' after import list.");
   }
 
-  consume(TokenType::SEMICOLON, "Expected ';' after import declaration.");
+  match(TokenType::SEMICOLON);
   return std::make_unique<ast::ImportDecl>(location_of(import_token), std::move(path),
                                            std::move(alias), std::move(selected));
 }

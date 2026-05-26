@@ -94,6 +94,7 @@ json::Value Server::handle_initialize(const json::Value &) {
   json::Array trigger_chars;
   trigger_chars.push_back(json::Value::string("."));
   trigger_chars.push_back(json::Value::string(":"));
+  trigger_chars.push_back(json::Value::string("\""));
   completion_provider["triggerCharacters"] = json::Value(trigger_chars);
   capabilities["completionProvider"] = json::Value(completion_provider);
 
@@ -227,7 +228,7 @@ json::Value Server::handle_completion(const json::Value &params) {
   }
 
   // File name completion inside import "..."
-  {
+  if (uri.compare(0, 7, "file://") == 0) {
     std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
     auto import_pos = before_cursor.rfind("import");
     if (import_pos != std::string::npos) {
@@ -670,7 +671,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition", true},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition", true},
     {"using", "using ${1:io};$0", "using declaration", true},
-    {"import", "import \"${1:file.kl}\";$0", "import module", true},
+    {"import", "import \"${1:file.kl}\"$0", "import module", true},
     {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function", true},
     {"return", "return ${0:expr};", "return statement", false},
   };
