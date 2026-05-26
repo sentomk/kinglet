@@ -206,7 +206,13 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
       const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get());
       if (!imp) continue;
       auto load_result = module_loader->load(imp->path);
-      if (!load_result.module) continue;
+      if (!load_result.module) {
+        result.diagnostics.push_back({
+            imp->location.line, imp->location.column,
+            1, load_result.error, 1  // severity=Error
+        });
+        continue;
+      }
       const auto &mod = *load_result.module;
       std::string ns = imp->alias.empty() ? mod.namespace_name : imp->alias;
 
