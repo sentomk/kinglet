@@ -277,6 +277,22 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
     }
   }
 
+  // For selective imports, also register bare names (import "x.kl" { add })
+  for (const auto &decl : parse_result.program->declarations) {
+    const auto *imp = dynamic_cast<const ast::ImportDecl *>(decl.get());
+    if (!imp || imp->selected_symbols.empty()) continue;
+    std::string ns = imp->alias.empty()
+        ? std::filesystem::path(imp->path).stem().string()
+        : imp->alias;
+    auto it = result.imported_symbols.find(ns);
+    if (it == result.imported_symbols.end()) continue;
+    for (auto sym : it->second) {
+      sym.scope_start_line = 0;
+      sym.scope_end_line = 999999;
+      result.symbols.symbols.push_back(std::move(sym));
+    }
+  }
+
   result.program = std::move(parse_result.program);
   result.valid = true;
 
