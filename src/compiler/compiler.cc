@@ -60,6 +60,22 @@ CompileResult Compiler::compile(const ast::Program &program) {
     }
   }
 
+  // Pass 1b: register impl methods as functions
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *impl_decl = dynamic_cast<const ast::ImplDecl *>(declaration.get())) {
+      for (const auto &method : impl_decl->methods) {
+        std::string mangled = impl_decl->target_type + "::" + method->name;
+        int idx = chunk_.add_function(FunctionInfo{
+            .name = mangled,
+            .entry = 0,
+            .param_count = static_cast<int>(method->params.size()),
+        });
+        uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
+        function_indices_[mangled] = static_cast<int>(const_idx);
+      }
+    }
+  }
+
   std::vector<const ast::FunctionDecl *> functions;
   int main_index = -1;
   for (const ast::DeclPtr &declaration : program.declarations) {
@@ -96,6 +112,18 @@ CompileResult Compiler::compile(const ast::Program &program) {
   // Pass 2: compile each function body
   for (const auto *function : functions) {
     compile_function(*function);
+    if (!errors_.empty()) break;
+  }
+
+  // Pass 2a: compile impl method bodies
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *impl_decl = dynamic_cast<const ast::ImplDecl *>(declaration.get())) {
+      for (const auto &method : impl_decl->methods) {
+        std::string mangled = impl_decl->target_type + "::" + method->name;
+        compile_function(*method, mangled);
+        if (!errors_.empty()) break;
+      }
+    }
     if (!errors_.empty()) break;
   }
 
@@ -212,6 +240,7 @@ void Compiler::pop_scope() {
 void Compiler::compile_function(const ast::FunctionDecl &function, const std::string &lookup_name) {
   locals_.clear();
   scope_stack_.clear();
+  local_types_.clear();
 
   // Look up this function's index and patch its entry point
   const std::string &name = lookup_name.empty() ? function.name : lookup_name;
@@ -224,6 +253,14 @@ void Compiler::compile_function(const ast::FunctionDecl &function, const std::st
   // Parameters become locals at slots 0..N-1
   for (const auto &param : function.params) {
     locals_.push_back(Local{.name = param.name, .is_mutable = true});
+    if (param.name == "self" && !lookup_name.empty()) {
+      auto sep = lookup_name.find("::");
+      if (sep != std::string::npos) {
+        local_types_["self"] = lookup_name.substr(0, sep);
+      }
+    } else if (!param.type.name.empty()) {
+      local_types_[param.name] = param.type.name;
+    }
   }
 
   // Detect implicit return: if last statement in body is an ExprStmt,
@@ -278,6 +315,13 @@ void Compiler::compile_stmt(const ast::Stmt &stmt) {
     uint32_t slot = 0;
     if (!declare_local(*var_decl, &slot)) {
       return;
+    }
+    if (!var_decl->type.name.empty()) {
+      local_types_[var_decl->name] = var_decl->type.name;
+    } else if (var_decl->init) {
+      if (const auto *struct_lit = dynamic_cast<const ast::StructLiteralExpr *>(var_decl->init.get())) {
+        local_types_[var_decl->name] = struct_lit->struct_type.name;
+      }
     }
     if (var_decl->init) {
       compile_expr(*var_decl->init);
@@ -803,6 +847,33 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         }
         if (method == "to_lower") {
           emit(OpCode::StringToLower, call_expr->location);
+          return;
+        }
+      }
+    }
+
+    // Handle impl method calls: obj.method(args...)
+    if (field_callee) {
+      std::string obj_type;
+      if (const auto *obj_id = dynamic_cast<const ast::IdentifierExpr *>(field_callee->object.get())) {
+        auto type_it = local_types_.find(obj_id->name);
+        if (type_it != local_types_.end()) {
+          obj_type = type_it->second;
+        }
+      }
+      if (!obj_type.empty()) {
+        std::string method_key = obj_type + "::" + field_callee->field_name;
+        auto func_it = function_indices_.find(method_key);
+        if (func_it != function_indices_.end()) {
+          compile_expr(*field_callee->object);
+          for (const ast::ExprPtr &arg : call_expr->args) {
+            compile_expr(*arg);
+          }
+          emit_constant(Value::function_value(
+              chunk_.constants()[static_cast<std::size_t>(func_it->second)].function_index_storage),
+              call_expr->location);
+          emit_operand(OpCode::Call, static_cast<uint32_t>(call_expr->args.size() + 1),
+                       call_expr->location);
           return;
         }
       }

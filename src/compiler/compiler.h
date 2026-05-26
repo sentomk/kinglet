@@ -86,6 +86,7 @@ private:
   std::unordered_map<std::string, std::string> namespace_aliases_;
   std::unordered_set<std::string> imported_namespaces_;
   std::unordered_map<std::string, std::vector<const ast::FunctionDecl *>> imported_function_decls_;
+  std::unordered_map<std::string, std::string> local_types_;
 };
 
 } // namespace kinglet
