@@ -1,1 +1,8 @@
-import "math.kl" { add, sub, add }
+import "math.kl" { add }
+
+math::add(1, 2);
+
+int main() {
+  math::add(1, 2);
+  return 0;
+}
