@@ -27,6 +27,7 @@ public:
     std::string error;
   };
 
+  void register_source_file(const std::string &path);
   LoadResult load(const std::string &path);
 
 private:
@@ -36,6 +37,7 @@ private:
   std::string base_dir_;
   std::unordered_map<std::string, ParsedModule> cache_;
   std::unordered_set<std::string> loading_;
+  std::unordered_set<std::string> source_files_;
 };
 
 } // namespace kinglet

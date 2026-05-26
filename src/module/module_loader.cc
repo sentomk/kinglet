@@ -23,12 +23,25 @@ std::string ModuleLoader::derive_namespace(const std::string &path) const {
   return p.stem().string();
 }
 
+void ModuleLoader::register_source_file(const std::string &path) {
+  std::filesystem::path p(path);
+  if (p.is_absolute()) {
+    source_files_.insert(std::filesystem::canonical(p).string());
+  } else {
+    source_files_.insert(std::filesystem::canonical(std::filesystem::path(base_dir_) / path).string());
+  }
+}
+
 ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
   std::string resolved;
   try {
     resolved = resolve_path(path);
   } catch (const std::filesystem::filesystem_error &) {
     return {nullptr, "Cannot resolve import path: " + path};
+  }
+
+  if (source_files_.count(resolved)) {
+    return {nullptr, "File cannot import itself: " + path};
   }
 
   if (loading_.count(resolved)) {

@@ -191,6 +191,7 @@ AnalysisResult analyze(const std::string &source, const std::string &file_path) 
     std::filesystem::path p(file_path);
     std::string base_dir = p.has_parent_path() ? p.parent_path().string() : ".";
     module_loader = std::make_unique<ModuleLoader>(base_dir);
+    module_loader->register_source_file(file_path);
   }
 
   TypeChecker checker;

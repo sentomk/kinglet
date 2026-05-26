@@ -300,6 +300,9 @@ int main(int argc, char **argv) {
     }
   }
   kinglet::ModuleLoader module_loader(base_dir);
+  if (!input_path.empty()) {
+    module_loader.register_source_file(input_path);
+  }
 
   kinglet::TypeChecker checker;
   checker.set_module_loader(&module_loader);
