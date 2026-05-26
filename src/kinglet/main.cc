@@ -1,10 +1,12 @@
 #include "checker/type_checker.h"
 #include "compiler/compiler.h"
+#include "module/module_loader.h"
 #include "lexer/scanner.h"
 #include "lexer/token.h"
 #include "parser/parser.h"
 #include "vm/vm.h"
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -290,7 +292,17 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  std::string base_dir = ".";
+  if (!input_path.empty()) {
+    std::filesystem::path p(input_path);
+    if (p.has_parent_path()) {
+      base_dir = p.parent_path().string();
+    }
+  }
+  kinglet::ModuleLoader module_loader(base_dir);
+
   kinglet::TypeChecker checker;
+  checker.set_module_loader(&module_loader);
   kinglet::TypeCheckResult type_result = checker.check(*result.program);
   bool has_type_errors = false;
   for (const kinglet::TypeError &error : type_result.errors) {
@@ -305,6 +317,7 @@ int main(int argc, char **argv) {
   }
 
   kinglet::Compiler compiler;
+  compiler.set_module_loader(&module_loader);
   kinglet::CompileResult compile_result = compiler.compile(*result.program);
   for (const kinglet::CompileError &error : compile_result.errors) {
     std::cerr << error.location.line << ':' << error.location.column

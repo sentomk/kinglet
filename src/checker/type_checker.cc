@@ -1,5 +1,7 @@
 #include "checker/type_checker.h"
 
+#include "module/module_loader.h"
+
 #include <algorithm>
 #include <sstream>
 #include <utility>
@@ -183,6 +185,39 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       func_type.param_types = std::move(param_types);
       func_type.return_type = std::make_unique<Type>(return_type);
       declare_var(func->name, func_type, false);
+    }
+    if (const auto *import_decl = dynamic_cast<const ast::ImportDecl *>(decl.get())) {
+      if (module_loader_) {
+        auto result = module_loader_->load(import_decl->path);
+        if (result.module) {
+          const auto &mod = *result.module;
+          std::string ns = import_decl->alias.empty() ? mod.namespace_name : import_decl->alias;
+          for (const auto *fn : mod.public_functions) {
+            if (!import_decl->selected_symbols.empty()) {
+              bool found = false;
+              for (const auto &s : import_decl->selected_symbols) {
+                if (s == fn->name) { found = true; break; }
+              }
+              if (!found) continue;
+            }
+            Type return_type = resolve_type_expr(fn->return_type);
+            std::vector<Type> param_types;
+            for (const auto &param : fn->params) {
+              param_types.push_back(resolve_type_expr(param.type));
+            }
+            Type func_type(TypeKind::Function);
+            func_type.param_types = std::move(param_types);
+            func_type.return_type = std::make_unique<Type>(return_type);
+            declare_var(ns + "::" + fn->name, func_type, false);
+            if (!import_decl->selected_symbols.empty()) {
+              Type ft2(TypeKind::Function);
+              ft2.param_types = func_type.param_types;
+              ft2.return_type = std::make_unique<Type>(*func_type.return_type);
+              declare_var(fn->name, ft2, false);
+            }
+          }
+        }
+      }
     }
   }
 

@@ -103,16 +103,41 @@ ast::DeclPtr Parser::declaration() {
     return using_declaration();
   }
 
+  if (match(TokenType::IMPORT)) {
+    return import_declaration();
+  }
+
+  bool is_public = match(TokenType::PUB);
+
   if (match(TokenType::STRUCT)) {
-    return struct_declaration();
+    auto decl = struct_declaration();
+    if (decl) {
+      auto *sd = static_cast<ast::StructDecl *>(decl.get());
+      sd->is_public = is_public;
+    }
+    return decl;
   }
 
   if (match(TokenType::ENUM)) {
-    return enum_declaration();
+    auto decl = enum_declaration();
+    if (decl) {
+      auto *ed = static_cast<ast::EnumDecl *>(decl.get());
+      ed->is_public = is_public;
+    }
+    return decl;
   }
 
   if (is_function_declaration_start()) {
-    return function_declaration();
+    auto decl = function_declaration();
+    if (decl) {
+      auto *fd = static_cast<ast::FunctionDecl *>(decl.get());
+      fd->is_public = is_public;
+    }
+    return decl;
+  }
+
+  if (is_public) {
+    error_at(peek(), "'pub' can only be used before function, struct, or enum declarations.");
   }
 
   ast::StmtPtr stmt = statement();
@@ -134,6 +159,34 @@ ast::DeclPtr Parser::using_declaration() {
   const Token &name = consume(TokenType::IDENTIFIER, "Expected namespace name after 'using'.");
   consume(TokenType::SEMICOLON, "Expected ';' after using declaration.");
   return std::make_unique<ast::UsingDecl>(location_of(using_token), token_text(name), is_namespace);
+}
+
+ast::DeclPtr Parser::import_declaration() {
+  const Token &import_token = previous();
+  const Token &path_token = consume(TokenType::STRING_LIT, "Expected file path string after 'import'.");
+  std::string path(token_text(path_token));
+  if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+    path = path.substr(1, path.size() - 2);
+  }
+
+  std::string alias;
+  std::vector<std::string> selected;
+
+  if (check(TokenType::IDENTIFIER) && token_text(peek()) == "as") {
+    advance(); // consume 'as'
+    const Token &alias_token = consume(TokenType::IDENTIFIER, "Expected alias name after 'as'.");
+    alias = token_text(alias_token);
+  } else if (match(TokenType::LEFT_BRACE)) {
+    do {
+      const Token &sym = consume(TokenType::IDENTIFIER, "Expected symbol name in import list.");
+      selected.push_back(std::string(token_text(sym)));
+    } while (match(TokenType::COMMA));
+    consume(TokenType::RIGHT_BRACE, "Expected '}' after import list.");
+  }
+
+  consume(TokenType::SEMICOLON, "Expected ';' after import declaration.");
+  return std::make_unique<ast::ImportDecl>(location_of(import_token), std::move(path),
+                                           std::move(alias), std::move(selected));
 }
 
 ast::DeclPtr Parser::struct_declaration() {

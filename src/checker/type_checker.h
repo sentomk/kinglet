@@ -3,6 +3,10 @@
 #include "ast/ast.h"
 #include "types/types.h"
 
+namespace kinglet {
+class ModuleLoader;
+}
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,6 +31,7 @@ struct TypeCheckResult {
 class TypeChecker {
 public:
   TypeCheckResult check(const ast::Program &program);
+  void set_module_loader(ModuleLoader *loader) { module_loader_ = loader; }
 
 private:
   void check_function(const ast::FunctionDecl &function);
@@ -63,6 +68,7 @@ private:
   std::unordered_set<std::string> opened_;  // using namespace io;
   int loop_depth_ = 0;
   const ast::ExprStmt *implicit_return_stmt_ = nullptr;
+  ModuleLoader *module_loader_ = nullptr;
 };
 
 } // namespace kinglet

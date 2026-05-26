@@ -299,13 +299,17 @@ struct FunctionDecl final : Decl {
   std::vector<std::string> type_params;
   std::vector<Parameter> params;
   StmtPtr body;
+  bool is_public = false;
 };
 
 struct ImportDecl final : Decl {
-  ImportDecl(SourceLocation location, std::string module);
+  ImportDecl(SourceLocation location, std::string path, std::string alias,
+             std::vector<std::string> selected_symbols);
   void print(std::ostream &out, int indent = 0) const override;
 
-  std::string module;
+  std::string path;
+  std::string alias;
+  std::vector<std::string> selected_symbols;
 };
 
 struct UsingDecl final : Decl {
@@ -385,6 +389,7 @@ struct StructDecl final : Decl {
   std::string name;
   std::vector<std::string> type_params;
   std::vector<FieldDef> fields;
+  bool is_public = false;
 };
 
 struct EnumVariantDecl {
@@ -398,6 +403,7 @@ struct EnumDecl final : Decl {
 
   std::string name;
   std::vector<EnumVariantDecl> variants;
+  bool is_public = false;
 };
 
 struct TopLevelStmtDecl final : Decl {

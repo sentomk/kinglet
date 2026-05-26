@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ast/ast.h"
+#include "module/module_loader.h"
 #include "vm/chunk.h"
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -29,6 +31,8 @@ struct CompileResult {
 class Compiler {
 public:
   CompileResult compile(const ast::Program &program);
+  CompileResult compile_module(const ast::Program &program);
+  void set_module_loader(ModuleLoader *loader) { module_loader_ = loader; }
 
 private:
   struct Local {
@@ -60,6 +64,8 @@ private:
   int resolve_struct(const ast::TypeExpr &type);
   void error_at(ast::SourceLocation location, std::string message);
 
+  void process_import(const ast::ImportDecl &import_decl);
+
   Chunk chunk_;
   std::vector<Local> locals_;
   std::vector<std::size_t> scope_stack_;
@@ -75,6 +81,10 @@ private:
   std::unordered_map<std::string, const ast::FunctionDecl *> generic_func_decls_;
   std::vector<std::pair<std::string, const ast::FunctionDecl *>> pending_generic_funcs_;
   const ast::ExprStmt *implicit_return_stmt_ = nullptr;
+  ModuleLoader *module_loader_ = nullptr;
+  std::unordered_map<std::string, std::string> namespace_aliases_;
+  std::unordered_set<std::string> imported_namespaces_;
+  std::unordered_map<std::string, std::vector<const ast::FunctionDecl *>> imported_function_decls_;
 };
 
 } // namespace kinglet

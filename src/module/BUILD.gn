@@ -1,0 +1,16 @@
+static_library("module") {
+  sources = [
+    "module_loader.cc",
+    "module_loader.h",
+  ]
+
+  deps = [
+    "//src/ast",
+    "//src/lexer",
+    "//src/parser",
+  ]
+
+  include_dirs = [
+    "//src",
+  ]
+}

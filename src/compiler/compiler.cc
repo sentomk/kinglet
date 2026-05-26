@@ -28,6 +28,9 @@ CompileResult Compiler::compile(const ast::Program &program) {
         opened_.insert(using_decl->namespace_name);
       }
     }
+    if (const auto *import_decl = dynamic_cast<const ast::ImportDecl *>(declaration.get())) {
+      process_import(*import_decl);
+    }
   }
 
   // Pass 1: register all structs, enums, and functions
@@ -96,6 +99,16 @@ CompileResult Compiler::compile(const ast::Program &program) {
     if (!errors_.empty()) break;
   }
 
+  // Pass 2b: compile imported function bodies
+  for (const auto &[ns, func_list] : imported_function_decls_) {
+    for (const auto *function : func_list) {
+      std::string qualified = ns + "::" + function->name;
+      compile_function(*function, qualified);
+      if (!errors_.empty()) break;
+    }
+    if (!errors_.empty()) break;
+  }
+
   // Pass 3: compile deferred generic function instantiations
   while (!pending_generic_funcs_.empty() && errors_.empty()) {
     auto pending = std::move(pending_generic_funcs_);
@@ -104,6 +117,80 @@ CompileResult Compiler::compile(const ast::Program &program) {
       compile_function(*decl, name);
       if (!errors_.empty()) break;
     }
+  }
+
+  return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_), .warnings = std::move(warnings_)};
+}
+
+CompileResult Compiler::compile_module(const ast::Program &program) {
+  chunk_ = Chunk();
+  locals_.clear();
+  errors_.clear();
+  warnings_.clear();
+  used_.clear();
+  opened_.clear();
+  function_indices_.clear();
+  struct_indices_.clear();
+  enum_indices_.clear();
+
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
+      used_.insert(using_decl->namespace_name);
+      if (using_decl->is_namespace) {
+        opened_.insert(using_decl->namespace_name);
+      }
+    }
+  }
+
+  // Register structs and enums
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *struct_decl = dynamic_cast<const ast::StructDecl *>(declaration.get())) {
+      if (!struct_decl->type_params.empty()) {
+        generic_struct_decls_[struct_decl->name] = struct_decl;
+        continue;
+      }
+      StructMeta meta;
+      meta.name = struct_decl->name;
+      for (const auto &field : struct_decl->fields) {
+        meta.field_names.push_back(field.name);
+      }
+      int idx = chunk_.add_struct_meta(std::move(meta));
+      struct_indices_[struct_decl->name] = idx;
+    }
+    if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(declaration.get())) {
+      EnumMeta meta;
+      meta.name = enum_decl->name;
+      for (const auto &v : enum_decl->variants) {
+        meta.variants.push_back(v.name);
+        meta.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));
+      }
+      int idx = chunk_.add_enum_meta(std::move(meta));
+      enum_indices_[enum_decl->name] = idx;
+    }
+  }
+
+  // Register and compile all functions (no main required)
+  std::vector<const ast::FunctionDecl *> functions;
+  for (const ast::DeclPtr &declaration : program.declarations) {
+    if (const auto *function = dynamic_cast<const ast::FunctionDecl *>(declaration.get())) {
+      if (!function->type_params.empty()) {
+        generic_func_decls_[function->name] = function;
+        continue;
+      }
+      int idx = chunk_.add_function(FunctionInfo{
+          .name = function->name,
+          .entry = 0,
+          .param_count = static_cast<int>(function->params.size()),
+      });
+      uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
+      function_indices_[function->name] = static_cast<int>(const_idx);
+      functions.push_back(function);
+    }
+  }
+
+  for (const auto *function : functions) {
+    compile_function(*function);
+    if (!errors_.empty()) break;
   }
 
   return CompileResult{.chunk = std::move(chunk_), .errors = std::move(errors_), .warnings = std::move(warnings_)};
@@ -898,7 +985,7 @@ void Compiler::compile_expr(const ast::Expr &expr) {
             const uint32_t slot = static_cast<uint32_t>(locals_.size());
             locals_.push_back(Local{.name = field_binding->name, .is_mutable = false});
             emit_operand(OpCode::LoadLocal, temp_slot, enum_pat->location);
-            emit_operand(OpCode::EnumPayloadGet, static_cast<int>(i), enum_pat->location);
+            emit_operand(OpCode::EnumPayloadGet, static_cast<uint32_t>(i), enum_pat->location);
             emit_operand(OpCode::StoreLocal, slot, enum_pat->location);
             emit(OpCode::Pop, enum_pat->location);
             bind_slots.push_back(slot);
@@ -996,6 +1083,20 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         return;
       }
       emit_constant(Value::native_function_value(fn), ns_access->location);
+      return;
+    }
+    // Check imported module namespaces
+    if (imported_namespaces_.count(ns_access->namespace_name)) {
+      std::string qualified = ns_access->namespace_name + "::" + ns_access->member_name;
+      auto it = function_indices_.find(qualified);
+      if (it != function_indices_.end()) {
+        emit_constant(Value::function_value(
+            chunk_.constants()[static_cast<std::size_t>(it->second)].function_index_storage),
+            ns_access->location);
+        return;
+      }
+      error_at(ns_access->location, "'" + ns_access->member_name + "' is not exported from module '" +
+               ns_access->namespace_name + "'.");
       return;
     }
     if (used_.count(ns_access->namespace_name) != 0) {
@@ -1207,6 +1308,50 @@ void Compiler::error_at(ast::SourceLocation location, std::string message) {
       .location = location,
       .message = std::move(message),
   });
+}
+
+void Compiler::process_import(const ast::ImportDecl &import_decl) {
+  if (!module_loader_) {
+    error_at(import_decl.location, "Import not supported (no module loader configured).");
+    return;
+  }
+
+  auto result = module_loader_->load(import_decl.path);
+  if (!result.module) {
+    error_at(import_decl.location, result.error);
+    return;
+  }
+
+  const ParsedModule &mod = *result.module;
+  std::string ns = import_decl.alias.empty() ? mod.namespace_name : import_decl.alias;
+
+  imported_namespaces_.insert(ns);
+
+  for (const auto *func : mod.public_functions) {
+    if (!import_decl.selected_symbols.empty()) {
+      bool found = false;
+      for (const auto &s : import_decl.selected_symbols) {
+        if (s == func->name) { found = true; break; }
+      }
+      if (!found) continue;
+    }
+
+    int idx = chunk_.add_function(FunctionInfo{
+        .name = func->name,
+        .entry = 0,
+        .param_count = static_cast<int>(func->params.size()),
+    });
+    uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
+
+    std::string qualified = ns + "::" + func->name;
+    function_indices_[qualified] = static_cast<int>(const_idx);
+
+    if (!import_decl.selected_symbols.empty()) {
+      function_indices_[func->name] = static_cast<int>(const_idx);
+    }
+
+    imported_function_decls_[ns].push_back(func);
+  }
 }
 
 } // namespace kinglet

@@ -435,12 +435,24 @@ void FunctionDecl::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
-ImportDecl::ImportDecl(SourceLocation location, std::string module)
-    : Decl(location), module(std::move(module)) {}
+ImportDecl::ImportDecl(SourceLocation location, std::string path,
+                       std::string alias, std::vector<std::string> selected_symbols)
+    : Decl(location), path(std::move(path)), alias(std::move(alias)),
+      selected_symbols(std::move(selected_symbols)) {}
 
 void ImportDecl::print(std::ostream &out, int indent) const {
   write_indent(out, indent);
-  out << "(import " << module << ")";
+  out << "(import \"" << path << "\"";
+  if (!alias.empty()) out << " as " << alias;
+  if (!selected_symbols.empty()) {
+    out << " {";
+    for (std::size_t i = 0; i < selected_symbols.size(); ++i) {
+      if (i > 0) out << ", ";
+      out << selected_symbols[i];
+    }
+    out << "}";
+  }
+  out << ")";
 }
 
 UsingDecl::UsingDecl(SourceLocation location, std::string namespace_name, bool is_namespace)

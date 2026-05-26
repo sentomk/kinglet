@@ -1,0 +1,8 @@
+using io;
+import "math.kl";
+
+int main() {
+  io::out.line("{}", math::add(3, 4));
+  io::out.line("{}", math::multiply(2, 5));
+  return 0;
+}

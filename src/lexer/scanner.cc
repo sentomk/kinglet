@@ -375,6 +375,8 @@ TokenType Scanner::identifier_type() const {
       {"let", TokenType::LET},
       {"when", TokenType::WHEN},
       {"export", TokenType::EXPORT},
+      {"import", TokenType::IMPORT},
+      {"pub", TokenType::PUB},
       {"namespace", TokenType::NAMESPACE},
       {"using", TokenType::USING},
       {"struct", TokenType::STRUCT},
