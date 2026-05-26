@@ -611,6 +611,7 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition", true},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition", true},
     {"using", "using ${1:io};$0", "using declaration", true},
+    {"import", "import \"${1:file.kl}\";$0", "import module", true},
     {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function", true},
     {"return", "return ${0:expr};", "return statement", false},
   };
@@ -665,7 +666,8 @@ json::Value Server::handle_completion(const json::Value &params) {
 
   // Control flow keywords
   const char *kw_with_space[] = {"if", "else", "for", "while", "return",
-                                  "match", "let", "const", "export", "using",
+                                  "match", "let", "const", "import", "pub",
+                                  "export", "using",
                                   "struct", "enum", "trait", "spawn", "select"};
   const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
   for (const char *kw : kw_with_space) {
@@ -1026,8 +1028,9 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
     case TokenType::RETURN: case TokenType::IF: case TokenType::ELSE:
     case TokenType::FOR: case TokenType::WHILE: case TokenType::BREAK:
     case TokenType::CONTINUE: case TokenType::GUARD: case TokenType::MATCH:
-    case TokenType::LET: case TokenType::WHEN: case TokenType::IMPORT:
-    case TokenType::EXPORT: case TokenType::NAMESPACE: case TokenType::USING:
+    case TokenType::PUB: case TokenType::LET: case TokenType::WHEN:
+    case TokenType::IMPORT: case TokenType::EXPORT: case TokenType::NAMESPACE:
+    case TokenType::USING:
     case TokenType::STRUCT: case TokenType::ENUM: case TokenType::TRAIT:
     case TokenType::SPAWN: case TokenType::SELECT: case TokenType::TRUE:
     case TokenType::FALSE: case TokenType::NULL_:
