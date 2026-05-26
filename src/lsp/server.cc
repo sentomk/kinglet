@@ -360,6 +360,61 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
+  // Struct literal field completion: StructName { field: ... }
+  {
+    // Scan backwards from cursor to find an unmatched '{'
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    auto brace_pos = before_cursor.rfind('{');
+    if (brace_pos != std::string::npos) {
+      // Check if there's a struct name before the '{'
+      std::size_t j = brace_pos;
+      while (j > 0 && std::isspace(static_cast<unsigned char>(before_cursor[j - 1]))) --j;
+      std::size_t name_end = j;
+      while (j > 0 && (std::isalnum(static_cast<unsigned char>(before_cursor[j - 1])) || before_cursor[j - 1] == '_')) --j;
+      std::string struct_name = before_cursor.substr(j, name_end - j);
+
+      // Make sure it's not "match {" or control flow
+      if (!struct_name.empty() && struct_name != "match" && struct_name != "if" &&
+          struct_name != "else" && struct_name != "for" && struct_name != "while") {
+        auto visible_syms = doc->analysis.symbols.visible_at(line + 1);
+        const Symbol *struct_sym = nullptr;
+        for (const auto *s : visible_syms) {
+          if (s->kind == SymbolKind::Struct && s->name == struct_name) {
+            struct_sym = s;
+            break;
+          }
+        }
+
+        if (struct_sym && !struct_sym->fields.empty()) {
+          // Collect already-assigned fields
+          std::string after_brace = before_cursor.substr(brace_pos + 1);
+          std::set<std::string> assigned;
+          std::size_t pos = 0;
+          while (pos < after_brace.size()) {
+            while (pos < after_brace.size() && !std::isalnum(static_cast<unsigned char>(after_brace[pos])) && after_brace[pos] != '_') ++pos;
+            std::size_t start = pos;
+            while (pos < after_brace.size() && (std::isalnum(static_cast<unsigned char>(after_brace[pos])) || after_brace[pos] == '_')) ++pos;
+            std::string word = after_brace.substr(start, pos - start);
+            if (pos < after_brace.size() && after_brace[pos] == ':') {
+              assigned.insert(word);
+            }
+          }
+
+          for (const auto &field : struct_sym->fields) {
+            if (assigned.count(field.name)) continue;
+            if (!prefix.empty() && field.name.find(prefix) == std::string::npos) continue;
+            std::string snippet = field.name + ": ${1:" + field.type_name + "}";
+            items.push_back(protocol::completion_item(field.name, 5, field.type_name, snippet, 2));
+          }
+
+          if (!items.empty()) {
+            return json::Value(items);
+          }
+        }
+      }
+    }
+  }
+
   // Check for . (dot) completion — offer struct fields or io methods
   if (character >= 1) {
     int dot_pos = character - 1;
