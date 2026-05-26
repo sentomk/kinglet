@@ -96,6 +96,8 @@ json::Value Server::handle_initialize(const json::Value &) {
   trigger_chars.push_back(json::Value::string("."));
   trigger_chars.push_back(json::Value::string(":"));
   trigger_chars.push_back(json::Value::string("\""));
+  trigger_chars.push_back(json::Value::string("{"));
+  trigger_chars.push_back(json::Value::string(","));
   completion_provider["triggerCharacters"] = json::Value(trigger_chars);
   capabilities["completionProvider"] = json::Value(completion_provider);
 

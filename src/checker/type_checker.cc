@@ -187,6 +187,15 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
       declare_var(func->name, func_type, false);
     }
     if (const auto *import_decl = dynamic_cast<const ast::ImportDecl *>(decl.get())) {
+      // Check for duplicate symbols in selective import
+      if (!import_decl->selected_symbols.empty()) {
+        std::unordered_set<std::string> seen;
+        for (const auto &s : import_decl->selected_symbols) {
+          if (!seen.insert(s).second) {
+            error_at(import_decl->location, "Duplicate symbol '" + s + "' in import list.");
+          }
+        }
+      }
       if (module_loader_) {
         auto result = module_loader_->load(import_decl->path);
         if (result.module) {
