@@ -83,9 +83,20 @@ ast::UnaryOp token_to_unary_op(TokenType type) {
 
 Parser::Parser(const std::vector<Token> &tokens) : tokens_(tokens) {}
 
+Parser::Parser(const std::vector<Token> &tokens, std::size_t completion_index)
+    : tokens_(tokens), completion_mode_(true), completion_index_(completion_index) {}
+
+bool Parser::at_completion() const {
+  return completion_mode_ && current_ == completion_index_;
+}
+
+void Parser::set_completion(lsp::CompletionInfo info) {
+  completion_result_ = std::move(info);
+}
+
 ParseResult Parser::parse() {
   std::vector<ast::DeclPtr> declarations;
-  while (!is_at_end()) {
+  while (!is_at_end() && !has_completion()) {
     ast::DeclPtr decl = declaration();
     if (decl) {
       declarations.push_back(std::move(decl));
@@ -99,6 +110,11 @@ ParseResult Parser::parse() {
 }
 
 ast::DeclPtr Parser::declaration() {
+  if (at_completion()) {
+    set_completion({lsp::CompletionPosition::TopLevelDecl, {}, {}, {}, {}, {}, {}});
+    return nullptr;
+  }
+
   if (match(TokenType::USING)) {
     return using_declaration();
   }
@@ -224,10 +240,19 @@ ast::DeclPtr Parser::struct_declaration() {
 
   std::vector<ast::FieldDef> fields;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+    if (at_completion()) {
+      set_completion({lsp::CompletionPosition::StructFieldDecl, {}, {}, {}, {}, {}, {}});
+      return nullptr;
+    }
+    size_t start_pos = current_;
     ast::TypeExpr type = parse_type_expr();
+    if (has_completion()) return nullptr;
     const Token &field_name = consume(TokenType::IDENTIFIER, "Expected field name.");
     consume(TokenType::SEMICOLON, "Expected ';' after field declaration.");
     fields.push_back(ast::FieldDef{std::move(type), token_text(field_name)});
+    if (current_ == start_pos) {
+      advance();
+    }
   }
   consume(TokenType::RIGHT_BRACE, "Expected '}' after struct body.");
 
@@ -242,14 +267,23 @@ ast::DeclPtr Parser::enum_declaration() {
 
   std::vector<ast::EnumVariantDecl> variants;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+    if (at_completion()) {
+      set_completion({lsp::CompletionPosition::EnumVariant, {}, {}, {}, {}, {}, {}});
+      return nullptr;
+    }
+    size_t start_pos = current_;
     const Token &variant = consume(TokenType::IDENTIFIER, "Expected variant name.");
     ast::EnumVariantDecl decl;
     decl.name = token_text(variant);
     if (match(TokenType::LEFT_PAREN)) {
       while (!check(TokenType::RIGHT_PAREN) && !is_at_end()) {
+        size_t inner_pos = current_;
         decl.param_types.push_back(parse_type_expr());
         if (!check(TokenType::RIGHT_PAREN)) {
           consume(TokenType::COMMA, "Expected ',' between variant parameter types.");
+        }
+        if (current_ == inner_pos) {
+          advance();
         }
       }
       consume(TokenType::RIGHT_PAREN, "Expected ')' after variant parameters.");
@@ -257,6 +291,9 @@ ast::DeclPtr Parser::enum_declaration() {
     variants.push_back(std::move(decl));
     if (!check(TokenType::RIGHT_BRACE)) {
       consume(TokenType::COMMA, "Expected ',' between enum variants.");
+    }
+    if (current_ == start_pos) {
+      advance();
     }
   }
   consume(TokenType::RIGHT_BRACE, "Expected '}' after enum body.");
@@ -272,6 +309,10 @@ ast::DeclPtr Parser::impl_declaration() {
 
   std::string trait_name;
   if (match(TokenType::COLON)) {
+    if (at_completion()) {
+      set_completion({lsp::CompletionPosition::TraitName, target_type, {}, {}, {}, {}, {}});
+      return nullptr;
+    }
     const Token &trait_tok = consume(TokenType::IDENTIFIER, "Expected trait name after ':'.");
     trait_name = token_text(trait_tok);
   }
@@ -280,7 +321,13 @@ ast::DeclPtr Parser::impl_declaration() {
 
   std::vector<std::unique_ptr<ast::FunctionDecl>> methods;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+    if (at_completion()) {
+      set_completion({lsp::CompletionPosition::ImplMethodDecl, target_type, trait_name, {}, {}, {}, {}});
+      return nullptr;
+    }
+    size_t start_pos = current_;
     ast::TypeExpr return_type = parse_type_expr();
+    if (has_completion()) return nullptr;
     const Token &method_name = consume(TokenType::IDENTIFIER, "Expected method name.");
     consume(TokenType::LEFT_PAREN, "Expected '(' after method name.");
 
@@ -301,6 +348,10 @@ ast::DeclPtr Parser::impl_declaration() {
         location_of(method_name), std::move(return_type), token_text(method_name),
         std::vector<std::string>{}, std::move(params), std::move(body));
     methods.push_back(std::move(method));
+
+    if (current_ == start_pos) {
+      advance();
+    }
   }
   consume(TokenType::RIGHT_BRACE, "Expected '}' after impl body.");
 
@@ -317,7 +368,13 @@ ast::DeclPtr Parser::trait_declaration() {
 
   std::vector<ast::TraitMethodDecl> methods;
   while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+    if (at_completion()) {
+      set_completion({lsp::CompletionPosition::TraitMethodDecl, token_text(name_token), {}, {}, {}, {}, {}});
+      return nullptr;
+    }
+    size_t start_pos = current_;
     ast::TypeExpr return_type = parse_type_expr();
+    if (has_completion()) return nullptr;
     const Token &method_name = consume(TokenType::IDENTIFIER, "Expected method name.");
     consume(TokenType::LEFT_PAREN, "Expected '(' after method name.");
 
@@ -343,6 +400,10 @@ ast::DeclPtr Parser::trait_declaration() {
     methods.push_back(ast::TraitMethodDecl{
         std::move(return_type), token_text(method_name), std::move(params),
         std::move(default_body)});
+
+    if (current_ == start_pos) {
+      advance();
+    }
   }
   consume(TokenType::RIGHT_BRACE, "Expected '}' after trait body.");
 
@@ -374,6 +435,10 @@ ast::DeclPtr Parser::function_declaration() {
 }
 
 ast::StmtPtr Parser::statement() {
+  if (at_completion()) {
+    set_completion({lsp::CompletionPosition::Statement, {}, {}, {}, {}, {}, {}});
+    return nullptr;
+  }
   if (match(TokenType::LEFT_BRACE)) {
     return block_statement();
   }
@@ -407,9 +472,10 @@ ast::StmtPtr Parser::statement() {
 ast::StmtPtr Parser::block_statement() {
   const Token &left_brace = previous();
   std::vector<ast::StmtPtr> statements;
-  while (!check(TokenType::RIGHT_BRACE) && !is_at_end()) {
+  while (!check(TokenType::RIGHT_BRACE) && !is_at_end() && !has_completion()) {
     statements.push_back(statement());
   }
+  if (has_completion()) return nullptr;
   consume(TokenType::RIGHT_BRACE, "Expected '}' after block.");
   return std::make_unique<ast::BlockStmt>(location_of(left_brace), std::move(statements));
 }
@@ -598,6 +664,7 @@ ast::StmtPtr Parser::var_declaration() {
 
 ast::StmtPtr Parser::expression_statement() {
   ast::ExprPtr expr = expression();
+  if (has_completion()) return nullptr;
   const ast::SourceLocation location = expr->location;
   consume(TokenType::SEMICOLON, "Expected ';' after expression.");
   return std::make_unique<ast::ExprStmt>(location, std::move(expr));
@@ -609,6 +676,7 @@ ast::ExprPtr Parser::expression() {
 
 ast::ExprPtr Parser::assignment() {
   ast::ExprPtr expr = pipeline();
+  if (has_completion()) return expr;
   if (is_assignment_operator(peek().type)) {
     const Token &op = advance();
     ast::ExprPtr value = assignment();
@@ -761,6 +829,7 @@ ast::ExprPtr Parser::unary() {
 
 ast::ExprPtr Parser::call() {
   ast::ExprPtr expr = primary();
+  if (has_completion()) return expr;
   while (true) {
     if (check(TokenType::LESS) && dynamic_cast<const ast::IdentifierExpr *>(expr.get())) {
       size_t saved = current_;
@@ -815,6 +884,10 @@ ast::ExprPtr Parser::call() {
       expr = std::make_unique<ast::CallExpr>(location, std::move(expr),
                                              std::vector<ast::TypeExpr>{}, std::move(args));
     } else if (match(TokenType::DOT)) {
+      if (at_completion()) {
+        set_completion({lsp::CompletionPosition::FieldAccess, {}, {}, {}, {}, {}, {}});
+        return expr;
+      }
       const Token &field = consume(TokenType::IDENTIFIER, "Expected field name after '.'.");
       const ast::SourceLocation location = expr->location;
       expr = std::make_unique<ast::FieldAccessExpr>(location, std::move(expr), token_text(field));
@@ -833,6 +906,10 @@ ast::ExprPtr Parser::call() {
 }
 
 ast::ExprPtr Parser::primary() {
+  if (at_completion()) {
+    set_completion({lsp::CompletionPosition::ExpressionStart, {}, {}, {}, {}, {}, {}});
+    return nullptr;
+  }
   if (match(TokenType::INTEGER)) {
     const Token &literal = previous();
     return std::make_unique<ast::IntLiteralExpr>(location_of(literal), literal.int_value);
@@ -1022,7 +1099,11 @@ ast::StmtPtr Parser::function_body() {
     return block_statement();
   }
   if (match(TokenType::FAT_ARROW)) {
+    if (match(TokenType::LEFT_BRACE)) {
+      return block_statement();
+    }
     ast::ExprPtr value = expression();
+    if (has_completion()) return nullptr;
     consume(TokenType::SEMICOLON, "Expected ';' after expression body.");
     const ast::SourceLocation location = value->location;
     return std::make_unique<ast::ReturnStmt>(location, std::move(value));
@@ -1189,6 +1270,10 @@ std::string Parser::token_text(const Token &token) const {
 }
 
 ast::TypeExpr Parser::parse_type_expr() {
+  if (at_completion()) {
+    set_completion({lsp::CompletionPosition::TypeExpr, {}, {}, {}, {}, {}, {}});
+    return ast::TypeExpr{"<error>", {}};
+  }
   if (!is_type_start(peek().type)) {
     error_at(peek(), "Expected type name.");
     return ast::TypeExpr{"<error>", {}};

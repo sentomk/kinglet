@@ -41,7 +41,8 @@ enum class TokenType {
 
   // Special
   END_OF_FILE,
-  ERROR
+  ERROR,
+  COMPLETION
 
   /* clang-format on */
 

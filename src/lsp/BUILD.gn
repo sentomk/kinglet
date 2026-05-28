@@ -2,6 +2,9 @@ static_library("lsp") {
   sources = [
     "analysis.cc",
     "analysis.h",
+    "completion_context.h",
+    "completion_token.cc",
+    "completion_token.h",
     "document_store.cc",
     "document_store.h",
     "json.cc",

@@ -2,8 +2,10 @@
 
 #include "ast/ast.h"
 #include "lexer/token.h"
+#include "lsp/completion_context.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,8 +26,12 @@ struct ParseResult {
 class Parser {
 public:
   explicit Parser(const std::vector<Token> &tokens);
+  Parser(const std::vector<Token> &tokens, std::size_t completion_index);
 
   ParseResult parse();
+
+  bool has_completion() const { return completion_result_.has_value(); }
+  const lsp::CompletionInfo &completion_result() const { return *completion_result_; }
 
 private:
   ast::DeclPtr declaration();
@@ -87,10 +93,16 @@ private:
   void synchronize();
   void error_at(const Token &token, std::string_view message);
 
+  bool at_completion() const;
+  void set_completion(lsp::CompletionInfo info);
+
   const std::vector<Token> &tokens_;
   std::size_t current_ = 0;
   std::vector<ParseError> errors_;
   bool pending_greater_ = false;
+  bool completion_mode_ = false;
+  std::size_t completion_index_ = 0;
+  std::optional<lsp::CompletionInfo> completion_result_;
 };
 
 } // namespace kinglet

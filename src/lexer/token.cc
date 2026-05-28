@@ -172,6 +172,8 @@ const char *token_type_name(TokenType type) {
     return "END_OF_FILE";
   case TokenType::ERROR:
     return "ERROR";
+  case TokenType::COMPLETION:
+    return "COMPLETION";
   }
 
   return "UNKNOWN";
