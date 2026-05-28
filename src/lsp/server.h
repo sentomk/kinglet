@@ -38,6 +38,7 @@ private:
 
   Transport transport_;
   DocumentStore store_;
+  std::string pending_diagnostics_uri_;
 };
 
 } // namespace kinglet::lsp

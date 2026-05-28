@@ -48,7 +48,12 @@ void Server::handle_message(const json::Value &msg) {
   } else if (method == "textDocument/didClose") {
     handle_did_close(params);
   } else if (method == "textDocument/completion") {
-    send_response(id, handle_completion(params));
+    auto result = handle_completion(params);
+    json::Object list;
+    list["isIncomplete"] = json::Value(false);
+    list["items"] = result;
+    std::cerr << "[LSP] completion: " << (result.is_array() ? result.as_array().size() : 0) << " items" << std::endl;
+    send_response(id, json::Value(list));
   } else if (method == "textDocument/definition") {
     send_response(id, handle_definition(params));
   } else if (method == "textDocument/hover") {
@@ -64,6 +69,13 @@ void Server::handle_message(const json::Value &msg) {
     send_response(id, json::Value::null());
   } else if (method == "exit") {
     return;
+  }
+
+  // Send pending diagnostics after handling the current request
+  if (!pending_diagnostics_uri_.empty()) {
+    auto *d = store_.get(pending_diagnostics_uri_);
+    if (d) publish_diagnostics(*d);
+    pending_diagnostics_uri_.clear();
   }
 }
 
@@ -166,8 +178,7 @@ void Server::handle_did_change(const json::Value &params) {
 
   std::string new_text = changes.back().as_object().at("text").as_string();
   store_.change(uri, new_text);
-  auto *d = store_.get(uri);
-  if (d) publish_diagnostics(*d);
+  pending_diagnostics_uri_ = uri;
 }
 
 void Server::handle_did_close(const json::Value &params) {
@@ -193,14 +204,18 @@ static std::string uri_to_path(const std::string &uri) {
 
 void Server::ensure_analyzed(Document &doc) {
   if (!doc.dirty) return;
-  auto new_analysis = analyze(doc.text, uri_to_path(doc.uri));
-  // If re-analysis lost import information (e.g. due to parse errors),
-  // preserve it from the previous analysis so completion still works.
-  if (new_analysis.imported_namespaces.empty() && !doc.analysis.imported_namespaces.empty()) {
-    new_analysis.imported_namespaces = std::move(doc.analysis.imported_namespaces);
-    new_analysis.imported_symbols = std::move(doc.analysis.imported_symbols);
+  try {
+    auto new_analysis = analyze(doc.text, uri_to_path(doc.uri));
+    if (new_analysis.imported_namespaces.empty() && !doc.analysis.imported_namespaces.empty()) {
+      new_analysis.imported_namespaces = std::move(doc.analysis.imported_namespaces);
+      new_analysis.imported_symbols = std::move(doc.analysis.imported_symbols);
+    }
+    doc.analysis = std::move(new_analysis);
+  } catch (const std::exception &e) {
+    std::cerr << "[LSP] analysis error: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "[LSP] analysis error: unknown exception" << std::endl;
   }
-  doc.analysis = std::move(new_analysis);
   doc.dirty = false;
 }
 
@@ -235,6 +250,148 @@ json::Value Server::handle_completion(const json::Value &params) {
   while (std::getline(stream, l)) {
     if (cur_line == line) { line_text = l; break; }
     ++cur_line;
+  }
+
+  // Suppress completion inside string literals
+  {
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    int quote_count = 0;
+    for (std::size_t i = 0; i < before_cursor.size(); ++i) {
+      if (before_cursor[i] == '"' && (i == 0 || before_cursor[i - 1] != '\\')) {
+        ++quote_count;
+      }
+    }
+    if (quote_count % 2 == 1) {
+      return json::Value(items);
+    }
+  }
+
+  // Suppress completion inside comments
+  {
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    if (before_cursor.find("//") != std::string::npos) {
+      return json::Value(items);
+    }
+  }
+
+  // Detect cursor context: inside struct/enum/trait body or impl body
+  enum class CursorContext { TopLevel, StructBody, EnumBody, TraitBody, ImplBody, FunctionBody };
+  CursorContext cursor_context = CursorContext::TopLevel;
+  std::string impl_trait_name;
+  std::string impl_target_type;
+  {
+    std::string full_text_before;
+    std::istringstream ctx_stream(doc->text);
+    std::string ctx_line;
+    int ctx_cur = 0;
+    while (std::getline(ctx_stream, ctx_line)) {
+      if (ctx_cur < line) {
+        full_text_before += ctx_line + "\n";
+      } else if (ctx_cur == line) {
+        full_text_before += ctx_line.substr(0, static_cast<std::size_t>(character));
+        break;
+      }
+      ++ctx_cur;
+    }
+
+    int brace_depth = 0;
+    std::string context_keyword;
+    std::size_t decl_brace_pos = 0;
+    for (std::size_t i = 0; i < full_text_before.size(); ++i) {
+      char c = full_text_before[i];
+      if (c == '/' && i + 1 < full_text_before.size() && full_text_before[i + 1] == '/') {
+        while (i < full_text_before.size() && full_text_before[i] != '\n') ++i;
+        continue;
+      }
+      if (c == '"') {
+        ++i;
+        while (i < full_text_before.size() && full_text_before[i] != '"') {
+          if (full_text_before[i] == '\\') ++i;
+          ++i;
+        }
+        continue;
+      }
+      if (c == '{') {
+        ++brace_depth;
+        if (brace_depth == 1) {
+          decl_brace_pos = i;
+          std::size_t j = i;
+          while (j > 0 && std::isspace(static_cast<unsigned char>(full_text_before[j - 1]))) --j;
+          std::size_t word_end = j;
+          while (j > 0 && (std::isalnum(static_cast<unsigned char>(full_text_before[j - 1])) || full_text_before[j - 1] == '_')) --j;
+          std::string word = full_text_before.substr(j, word_end - j);
+
+          std::string preceding = full_text_before.substr(j > 40 ? j - 40 : 0, j > 40 ? 40 : j);
+          if (word == "struct" || preceding.rfind("struct") != std::string::npos)
+            context_keyword = "struct";
+          else if (word == "enum" || preceding.rfind("enum") != std::string::npos)
+            context_keyword = "enum";
+          else if (word == "trait" || preceding.rfind("trait") != std::string::npos)
+            context_keyword = "trait";
+          else if (preceding.rfind("impl") != std::string::npos)
+            context_keyword = "impl";
+          else
+            context_keyword = "function";
+        } else if (brace_depth == 2 && (context_keyword == "impl" || context_keyword == "trait")) {
+          context_keyword = "function";
+        }
+      } else if (c == '}') {
+        --brace_depth;
+        if (brace_depth <= 0) {
+          brace_depth = 0;
+          context_keyword = "";
+        } else if (brace_depth == 1 && (context_keyword == "function")) {
+          std::size_t impl_search = full_text_before.rfind("impl");
+          if (impl_search != std::string::npos) context_keyword = "impl";
+          else context_keyword = "trait";
+        }
+      }
+    }
+
+    if (context_keyword == "struct") cursor_context = CursorContext::StructBody;
+    else if (context_keyword == "enum") cursor_context = CursorContext::EnumBody;
+    else if (context_keyword == "trait") cursor_context = CursorContext::TraitBody;
+    else if (context_keyword == "impl") cursor_context = CursorContext::ImplBody;
+    else if (context_keyword == "function") cursor_context = CursorContext::FunctionBody;
+
+    // Extract impl trait name and target type for method suggestions
+    if (cursor_context == CursorContext::ImplBody && decl_brace_pos > 0) {
+      std::string header = full_text_before.substr(0, decl_brace_pos);
+      auto impl_pos = header.rfind("impl");
+      if (impl_pos != std::string::npos) {
+        std::size_t p = impl_pos + 4;
+        while (p < header.size() && std::isspace(static_cast<unsigned char>(header[p]))) ++p;
+        std::size_t type_start = p;
+        while (p < header.size() && (std::isalnum(static_cast<unsigned char>(header[p])) || header[p] == '_')) ++p;
+        impl_target_type = header.substr(type_start, p - type_start);
+        while (p < header.size() && std::isspace(static_cast<unsigned char>(header[p]))) ++p;
+        if (p < header.size() && header[p] == ':') {
+          ++p;
+          while (p < header.size() && std::isspace(static_cast<unsigned char>(header[p]))) ++p;
+          std::size_t trait_start = p;
+          while (p < header.size() && (std::isalnum(static_cast<unsigned char>(header[p])) || header[p] == '_')) ++p;
+          impl_trait_name = header.substr(trait_start, p - trait_start);
+        }
+      }
+    }
+  }
+
+  // Trait name completion: impl Type : <prefix>
+  {
+    std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
+    auto impl_pos = before_cursor.rfind("impl");
+    if (impl_pos != std::string::npos) {
+      auto colon_pos = before_cursor.find(':', impl_pos + 4);
+      if (colon_pos != std::string::npos && before_cursor.find('{', impl_pos) == std::string::npos) {
+        auto visible = doc->analysis.symbols.visible_at(line + 1);
+        for (const auto *sym : visible) {
+          if (sym->kind != SymbolKind::Trait) continue;
+          if (!prefix.empty() && sym->name.find(prefix) == std::string::npos) continue;
+          items.push_back(protocol::completion_item(sym->name, 8, "trait " + sym->name));
+        }
+        if (!items.empty()) return json::Value(items);
+      }
+    }
   }
 
   // File name completion inside import "..."
@@ -368,15 +525,24 @@ json::Value Server::handle_completion(const json::Value &params) {
     std::string before_cursor = line_text.substr(0, static_cast<std::size_t>(character));
     auto colons = before_cursor.rfind("::");
     if (colons != std::string::npos) {
-      is_double_colon = true;
-      // Extract identifier before ::
-      int start = static_cast<int>(colons) - 1;
-      while (start >= 0 && std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(start)])))
-        --start;
-      ++start;
-      ns_start_char = start;
-      if (start < static_cast<int>(colons))
-        ns_name = line_text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(colons) - static_cast<std::size_t>(start));
+      bool valid_ns_context = true;
+      for (std::size_t i = colons + 2; i < before_cursor.size(); ++i) {
+        char c = before_cursor[i];
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+          valid_ns_context = false;
+          break;
+        }
+      }
+      if (valid_ns_context) {
+        is_double_colon = true;
+        int start = static_cast<int>(colons) - 1;
+        while (start >= 0 && std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(start)])))
+          --start;
+        ++start;
+        ns_start_char = start;
+        if (start < static_cast<int>(colons))
+          ns_name = line_text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(colons) - static_cast<std::size_t>(start));
+      }
     }
   }
 
@@ -635,8 +801,28 @@ json::Value Server::handle_completion(const json::Value &params) {
 
   // Check for . (dot) completion — offer struct fields or io methods
   if (character >= 1) {
-    int dot_pos = character - 1;
-    if (dot_pos < static_cast<int>(line_text.size()) &&
+    int dot_pos = -1;
+    // Find the dot: could be at character-1 (cursor right after dot),
+    // or earlier if user typed characters after the dot already
+    {
+      std::string before_cursor = line_text.substr(0, std::min(static_cast<std::size_t>(character), line_text.size()));
+      auto last_dot = before_cursor.rfind('.');
+      if (last_dot != std::string::npos) {
+        // Verify everything between dot and cursor is a valid identifier prefix
+        bool valid = true;
+        for (std::size_t i = last_dot + 1; i < before_cursor.size(); ++i) {
+          char c = before_cursor[i];
+          if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+            valid = false;
+            break;
+          }
+        }
+        if (valid) {
+          dot_pos = static_cast<int>(last_dot);
+        }
+      }
+    }
+    if (dot_pos >= 0 && dot_pos < static_cast<int>(line_text.size()) &&
         line_text[static_cast<std::size_t>(dot_pos)] == '.') {
       int end = dot_pos;
       int start = end;
@@ -645,6 +831,53 @@ json::Value Server::handle_completion(const json::Value &params) {
              line_text[static_cast<std::size_t>(start - 1)] == ':'))
         --start;
       std::string before_dot = line_text.substr(static_cast<std::size_t>(start), static_cast<std::size_t>(end - start));
+
+      // Method chaining: if char before dot is ')', resolve method call return type
+      std::string resolved_type;
+      if (dot_pos > 0 && line_text[static_cast<std::size_t>(dot_pos - 1)] == ')') {
+        int paren_depth = 0;
+        int paren_start = dot_pos - 1;
+        for (int i = dot_pos - 1; i >= 0; --i) {
+          char c = line_text[static_cast<std::size_t>(i)];
+          if (c == ')') ++paren_depth;
+          else if (c == '(') {
+            --paren_depth;
+            if (paren_depth == 0) { paren_start = i; break; }
+          }
+        }
+        int method_end = paren_start;
+        int method_start = method_end;
+        while (method_start > 0 && (std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(method_start - 1)])) ||
+               line_text[static_cast<std::size_t>(method_start - 1)] == '_'))
+          --method_start;
+        std::string method_name = line_text.substr(static_cast<std::size_t>(method_start), static_cast<std::size_t>(method_end - method_start));
+
+        if (method_start > 0 && line_text[static_cast<std::size_t>(method_start - 1)] == '.') {
+          int obj_end = method_start - 1;
+          int obj_start = obj_end;
+          if (obj_end > 0 && line_text[static_cast<std::size_t>(obj_end - 1)] == ')') {
+            // Nested chaining — not supported yet, skip
+          } else {
+            while (obj_start > 0 && (std::isalnum(static_cast<unsigned char>(line_text[static_cast<std::size_t>(obj_start - 1)])) ||
+                   line_text[static_cast<std::size_t>(obj_start - 1)] == '_'))
+              --obj_start;
+            std::string obj_name = line_text.substr(static_cast<std::size_t>(obj_start), static_cast<std::size_t>(obj_end - obj_start));
+            auto visible_syms = doc->analysis.symbols.visible_at(line + 1);
+            for (const auto *sym : visible_syms) {
+              if (sym->name == obj_name && !sym->type_name.empty()) {
+                std::string qualified = sym->type_name + "::" + method_name;
+                for (const auto *msym : visible_syms) {
+                  if (msym->kind == SymbolKind::Function && msym->name == qualified) {
+                    resolved_type = msym->return_type;
+                    break;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
 
       if ((before_dot == "io::out" || before_dot == "io::err") &&
           (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
@@ -665,6 +898,51 @@ json::Value Server::handle_completion(const json::Value &params) {
               "secret($1)", line, character, character));
         }
         return json::Value(items);
+      }
+
+      // Method chaining: if we resolved a return type, offer its fields/methods
+      if (!resolved_type.empty()) {
+        auto visible_syms = doc->analysis.symbols.visible_at(line + 1);
+        for (const auto *type_sym : visible_syms) {
+          if (type_sym->kind == SymbolKind::Struct && type_sym->name == resolved_type) {
+            int edit_start = dot_pos + 1;
+            for (const auto &field : type_sym->fields) {
+              items.push_back(protocol::completion_item_with_edit(
+                  field.name, 5, field.type_name + " " + field.name,
+                  line, edit_start, character));
+            }
+            for (const auto *method_sym : visible_syms) {
+              if (method_sym->kind == SymbolKind::Function) {
+                std::string method_prefix = resolved_type + "::";
+                if (method_sym->name.size() > method_prefix.size() &&
+                    method_sym->name.compare(0, method_prefix.size(), method_prefix) == 0) {
+                  std::string mname = method_sym->name.substr(method_prefix.size());
+                  std::string detail = method_sym->return_type + " " + mname + "(";
+                  bool first = true;
+                  for (const auto &p : method_sym->params) {
+                    if (p.name == "self") continue;
+                    if (!first) detail += ", ";
+                    detail += p.type.to_string() + " " + p.name;
+                    first = false;
+                  }
+                  detail += ")";
+                  std::string snippet = mname + "(";
+                  int idx = 1;
+                  for (const auto &p : method_sym->params) {
+                    if (p.name == "self") continue;
+                    if (idx > 1) snippet += ", ";
+                    snippet += "${" + std::to_string(idx) + ":" + p.name + "}";
+                    ++idx;
+                  }
+                  snippet += ")";
+                  items.push_back(protocol::snippet_item_with_edit(
+                      mname, 2, detail, snippet, line, edit_start, character));
+                }
+              }
+            }
+            if (!items.empty()) return json::Value(items);
+          }
+        }
       }
 
       // Regular struct field completion or array method completion
@@ -724,8 +1002,11 @@ json::Value Server::handle_completion(const json::Value &params) {
             }
             for (const auto *type_sym : visible_syms) {
               if (type_sym->kind == SymbolKind::Struct && type_sym->name == sym->type_name) {
+                int edit_start = dot_pos + 1;
                 for (const auto &field : type_sym->fields) {
-                  items.push_back(protocol::completion_item(field.name, 5, field.type_name + " " + field.name));
+                  items.push_back(protocol::completion_item_with_edit(
+                      field.name, 5, field.type_name + " " + field.name,
+                      line, edit_start, character));
                 }
                 // Also offer impl methods for this type
                 for (const auto *method_sym : visible_syms) {
@@ -752,11 +1033,31 @@ json::Value Server::handle_completion(const json::Value &params) {
                         ++idx;
                       }
                       snippet += ")";
-                      items.push_back(protocol::completion_item(method_name, 2, detail, snippet, 2));
+                      items.push_back(protocol::snippet_item_with_edit(
+                          method_name, 2, detail, snippet, line, edit_start, character));
                     }
                   }
                 }
                 return json::Value(items);
+              }
+            }
+            // If type is a trait, offer trait methods
+            for (const auto *type_sym : visible_syms) {
+              if (type_sym->kind == SymbolKind::Trait && type_sym->name == sym->type_name) {
+                int edit_start = dot_pos + 1;
+                for (const auto *method_sym : visible_syms) {
+                  if (method_sym->kind == SymbolKind::Function) {
+                    std::string method_prefix = sym->type_name + "::";
+                    if (method_sym->name.size() > method_prefix.size() &&
+                        method_sym->name.compare(0, method_prefix.size(), method_prefix) == 0) {
+                      std::string method_name = method_sym->name.substr(method_prefix.size());
+                      items.push_back(protocol::snippet_item_with_edit(
+                          method_name, 2, method_sym->type_name + " " + method_name + "(...)",
+                          method_name + "($1)", line, edit_start, character));
+                    }
+                  }
+                }
+                if (!items.empty()) return json::Value(items);
               }
             }
           }
@@ -765,7 +1066,82 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
-  // Scope-aware symbols
+  // Impl body: suggest unimplemented trait methods
+  if (cursor_context == CursorContext::ImplBody && !impl_trait_name.empty()) {
+    auto visible = doc->analysis.symbols.visible_at(line + 1);
+    const Symbol *trait_sym = nullptr;
+    for (const auto *s : visible) {
+      if (s->kind == SymbolKind::Trait && s->name == impl_trait_name) {
+        trait_sym = s;
+        break;
+      }
+    }
+    if (trait_sym && doc->analysis.program) {
+      // Find the trait declaration to get method signatures
+      const ast::TraitDecl *trait_decl = nullptr;
+      for (const auto &decl : doc->analysis.program->declarations) {
+        if (const auto *td = dynamic_cast<const ast::TraitDecl *>(decl.get())) {
+          if (td->name == impl_trait_name) { trait_decl = td; break; }
+        }
+      }
+      if (trait_decl) {
+        // Collect already-implemented methods from text after impl '{'
+        std::set<std::string> implemented;
+        for (const auto *s : visible) {
+          if (s->kind == SymbolKind::Function) {
+            std::string method_prefix = impl_target_type + "::";
+            if (s->name.size() > method_prefix.size() &&
+                s->name.compare(0, method_prefix.size(), method_prefix) == 0) {
+              implemented.insert(s->name.substr(method_prefix.size()));
+            }
+          }
+        }
+
+        int line_start = 0;
+        for (int i = 0; i < static_cast<int>(line_text.size()); ++i) {
+          if (!std::isspace(static_cast<unsigned char>(line_text[static_cast<std::size_t>(i)]))) {
+            line_start = i; break;
+          }
+        }
+
+        for (const auto &tm : trait_decl->methods) {
+          if (implemented.count(tm.name)) continue;
+          if (!prefix.empty() && tm.name.find(prefix) == std::string::npos) continue;
+
+          std::string ret = tm.return_type.to_string();
+          std::string sig = ret + " " + tm.name + "(";
+          std::string snippet = ret + " " + tm.name + "(";
+          bool first = true;
+          for (const auto &p : tm.params) {
+            if (!first) { sig += ", "; snippet += ", "; }
+            if (p.name == "self") {
+              sig += "self";
+              snippet += "self";
+            } else {
+              sig += p.type.to_string() + " " + p.name;
+              snippet += p.type.to_string() + " " + p.name;
+            }
+            first = false;
+          }
+          sig += ")";
+          snippet += ") => $0;";
+
+          items.push_back(protocol::snippet_item_with_edit(
+              tm.name, 2, sig, snippet, line, line_start, character));
+        }
+        if (!items.empty()) return json::Value(items);
+      }
+    }
+  }
+
+  bool in_declaration_body = cursor_context == CursorContext::StructBody ||
+      cursor_context == CursorContext::TraitBody ||
+      cursor_context == CursorContext::EnumBody ||
+      cursor_context == CursorContext::ImplBody;
+
+  // Scope-aware symbols — suppress in struct/enum/trait/impl bodies
+  if (cursor_context == CursorContext::TopLevel ||
+      cursor_context == CursorContext::FunctionBody) {
   auto visible = doc->analysis.symbols.visible_at(line + 1);
   for (const auto *sym : visible) {
     if (!prefix.empty() && sym->name.find(prefix) == std::string::npos) continue;
@@ -799,9 +1175,10 @@ json::Value Server::handle_completion(const json::Value &params) {
       items.push_back(protocol::completion_item(sym->name, kind, detail));
     }
   }
+  } // end scope-aware symbols context check
 
   // Bare io members when 'using namespace io;' is active — insert as-is
-  if (doc->analysis.opened_namespaces.count("io")) {
+  if (!in_declaration_body && doc->analysis.opened_namespaces.count("io")) {
     for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
              {"out", "io::out — stdout output"},
              {"err", "io::err — stderr output"},
@@ -809,7 +1186,7 @@ json::Value Server::handle_completion(const json::Value &params) {
       if (!prefix.empty() && name.find(prefix) == std::string::npos) continue;
       items.push_back(protocol::completion_item(name, 3, detail));
     }
-  } else if (doc->analysis.used_namespaces.count("io")) {
+  } else if (!in_declaration_body && doc->analysis.used_namespaces.count("io")) {
     // 'using io;' — insert qualified form io::name
     for (const auto &[name, qualified, detail] : std::vector<std::tuple<std::string, std::string, std::string>>{
              {"out", "io::out", "io::out — stdout output"},
@@ -837,6 +1214,9 @@ json::Value Server::handle_completion(const json::Value &params) {
     {"fun", "${1:int} ${2:name}(${3:params}) {\n\t$0\n}", "function declaration", true},
     {"struct", "struct ${1:Name} {\n\t$0\n}", "struct definition", true},
     {"enum", "enum ${1:Name} {\n\t$0\n}", "enum definition", true},
+    {"trait", "trait ${1:Name} {\n\t$0\n}", "trait definition", true},
+    {"impl", "impl ${1:Type} {\n\t$0\n}", "impl block", true},
+    {"impl trait", "impl ${1:Type} : ${2:Trait} {\n\t$0\n}", "trait implementation", true},
     {"using", "using ${1:io};$0", "using declaration", true},
     {"import", "import \"${1:file.kl}\"$0", "import module", true},
     {"main", "int main() {\n\t$0\n\treturn 0;\n}", "main function", true},
@@ -853,6 +1233,7 @@ json::Value Server::handle_completion(const json::Value &params) {
   }
 
   bool has_expr_before_cursor = false;
+  bool after_type_keyword = false;
   {
     std::size_t cursor_col = static_cast<std::size_t>(character);
     std::size_t prefix_start = cursor_col > prefix.size() ? cursor_col - prefix.size() : 0;
@@ -862,8 +1243,32 @@ json::Value Server::handle_completion(const json::Value &params) {
         break;
       }
     }
+    std::string before_cursor = line_text.substr(0, cursor_col);
+    std::size_t first_non_ws = before_cursor.find_first_not_of(" \t");
+    if (first_non_ws != std::string::npos) {
+      std::string trimmed = before_cursor.substr(first_non_ws);
+      for (const char *tw : {"int ", "float ", "double ", "bool ", "string ",
+                             "void ", "byte ", "auto ", "using ", "import "}) {
+        if (trimmed.find(tw) == 0) {
+          after_type_keyword = true;
+          break;
+        }
+      }
+      if (!after_type_keyword && !trimmed.empty()) {
+        std::size_t space_pos = trimmed.find(' ');
+        if (space_pos != std::string::npos && space_pos > 0 &&
+            std::isupper(static_cast<unsigned char>(trimmed[0]))) {
+          after_type_keyword = true;
+        }
+      }
+    }
   }
 
+  bool suppress_keywords = after_type_keyword ||
+      cursor_context == CursorContext::EnumBody;
+
+
+  if (!suppress_keywords && !in_declaration_body) {
   for (const auto &s : snippets) {
     if (!prefix.empty() && std::string(s.label).find(prefix) == std::string::npos) continue;
     if (std::string(s.label) == "match") {
@@ -880,34 +1285,40 @@ json::Value Server::handle_completion(const json::Value &params) {
       items.push_back(protocol::completion_item(s.label, 15, s.detail, s.body, 2));
     }
   }
+  } // end snippets block
 
-  // Type keywords
-  for (const char *kw : {"int", "float", "double", "bool", "string", "void", "byte", "auto"}) {
-    if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
-    json::Object item;
-    item["label"] = json::Value::string(kw);
-    item["kind"] = json::Value::number(14);
-    item["insertText"] = json::Value::string(std::string(kw) + " ");
-    items.push_back(json::Value(item));
+  // Type keywords — available in struct/impl bodies for field/method declarations
+  if (!suppress_keywords && cursor_context != CursorContext::TraitBody &&
+      cursor_context != CursorContext::EnumBody) {
+    for (const char *kw : {"int", "float", "double", "bool", "string", "void", "byte", "auto"}) {
+      if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
+      json::Object item;
+      item["label"] = json::Value::string(kw);
+      item["kind"] = json::Value::number(14);
+      item["insertText"] = json::Value::string(std::string(kw) + " ");
+      items.push_back(json::Value(item));
+    }
   }
 
-  // Control flow keywords
-  const char *kw_with_space[] = {"if", "else", "for", "while", "return",
-                                  "match", "let", "const", "import", "pub",
-                                  "export", "using",
-                                  "struct", "enum", "trait", "spawn", "select"};
-  const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
-  for (const char *kw : kw_with_space) {
-    if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
-    json::Object item;
-    item["label"] = json::Value::string(kw);
-    item["kind"] = json::Value::number(14);
-    item["insertText"] = json::Value::string(std::string(kw) + " ");
-    items.push_back(json::Value(item));
-  }
-  for (const char *kw : kw_standalone) {
-    if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
-    items.push_back(protocol::completion_item(kw, 14));
+  // Control flow keywords — not in declaration bodies
+  if (!suppress_keywords && !in_declaration_body) {
+    const char *kw_with_space[] = {"if", "else", "for", "while", "return",
+                                    "match", "let", "const", "import", "pub",
+                                    "export", "using",
+                                    "struct", "enum", "trait", "impl", "spawn", "select"};
+    const char *kw_standalone[] = {"break", "continue", "true", "false", "null"};
+    for (const char *kw : kw_with_space) {
+      if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
+      json::Object item;
+      item["label"] = json::Value::string(kw);
+      item["kind"] = json::Value::number(14);
+      item["insertText"] = json::Value::string(std::string(kw) + " ");
+      items.push_back(json::Value(item));
+    }
+    for (const char *kw : kw_standalone) {
+      if (!prefix.empty() && std::string(kw).find(prefix) == std::string::npos) continue;
+      items.push_back(protocol::completion_item(kw, 14));
+    }
   }
 
   // Namespace completions — only when 'using io;' is present
@@ -919,7 +1330,8 @@ json::Value Server::handle_completion(const json::Value &params) {
       in_using_context = true;
     }
   }
-  if (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io")) {
+  if (!in_declaration_body &&
+      (doc->analysis.used_namespaces.count("io") || doc->analysis.opened_namespaces.count("io"))) {
     for (const char *ns : {"io"}) {
       if (!prefix.empty() && std::string(ns).find(prefix) == std::string::npos) continue;
       if (in_using_context) {
@@ -939,7 +1351,6 @@ json::Value Server::handle_completion(const json::Value &params) {
     }
   }
 
-  std::cerr << "[LSP] completion: " << items.size() << " items, prefix='" << prefix << "'" << std::endl;
   return json::Value(items);
 }
 
@@ -974,6 +1385,9 @@ json::Value Server::handle_document_symbol(const json::Value &params) {
     case SymbolKind::Namespace:
       kind = 3;
       break;
+    case SymbolKind::Trait:
+      kind = 11;
+      break;
     }
     item["kind"] = json::Value::number(kind);
 
@@ -985,9 +1399,9 @@ json::Value Server::handle_document_symbol(const json::Value &params) {
     item["range"] = json::Value(range);
     item["selectionRange"] = json::Value(range);
 
-    // Only include top-level symbols (functions, structs, enums)
+    // Only include top-level symbols (functions, structs, enums, traits)
     if (sym.kind == SymbolKind::Function || sym.kind == SymbolKind::Struct ||
-        sym.kind == SymbolKind::Enum) {
+        sym.kind == SymbolKind::Enum || sym.kind == SymbolKind::Trait) {
       symbols.push_back(json::Value(item));
     }
   }
@@ -1248,8 +1662,15 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
   std::set<std::string> func_names;
   for (const auto &sym : doc->analysis.symbols.symbols) {
     if (sym.kind == SymbolKind::Struct) type_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Trait) type_names.insert(sym.name);
     else if (sym.kind == SymbolKind::Enum) enum_names.insert(sym.name);
-    else if (sym.kind == SymbolKind::Function) func_names.insert(sym.name);
+    else if (sym.kind == SymbolKind::Function) {
+      func_names.insert(sym.name);
+      auto colons = sym.name.find("::");
+      if (colons != std::string::npos) {
+        func_names.insert(sym.name.substr(colons + 2));
+      }
+    }
   }
 
   // Scan tokens
@@ -1277,9 +1698,13 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
     case TokenType::IMPORT: case TokenType::EXPORT: case TokenType::NAMESPACE:
     case TokenType::USING:
     case TokenType::STRUCT: case TokenType::ENUM: case TokenType::TRAIT:
+    case TokenType::IMPL:
     case TokenType::SPAWN: case TokenType::SELECT: case TokenType::TRUE:
     case TokenType::FALSE: case TokenType::NULL_:
       token_type = TT::Keyword;
+      break;
+    case TokenType::SELF:
+      token_type = TT::Parameter;
       break;
     case TokenType::STRING_LIT:
       token_type = TT::String;
@@ -1300,7 +1725,8 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
       break;
     case TokenType::IDENTIFIER: {
       std::string name(tok.lexeme);
-      if (type_names.count(name)) token_type = TT::Type;
+      if (name == "self") token_type = TT::Parameter;
+      else if (type_names.count(name)) token_type = TT::Type;
       else if (enum_names.count(name)) token_type = TT::Enum;
       else if (func_names.count(name)) token_type = TT::Function;
       else if (name == "io") token_type = TT::Namespace;

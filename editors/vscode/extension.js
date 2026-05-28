@@ -7,7 +7,14 @@ let client;
 
 function resolveServerPath() {
   const configured = vscode.workspace.getConfiguration('kinglet').get('server.path', '');
-  if (configured && fs.existsSync(configured)) return configured;
+  if (configured) {
+    if (path.isAbsolute(configured) && fs.existsSync(configured)) return configured;
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+      const resolved = path.resolve(workspaceFolders[0].uri.fsPath, configured);
+      if (fs.existsSync(resolved)) return resolved;
+    }
+  }
 
   const candidates = [
     path.join(process.env.HOME || '', 'bin', 'kinglet-lsp'),

@@ -10,7 +10,7 @@
 
 namespace kinglet::lsp {
 
-enum class SymbolKind { Variable, Function, Parameter, Namespace, Struct, Enum };
+enum class SymbolKind { Variable, Function, Parameter, Namespace, Struct, Enum, Trait };
 
 struct FieldSymbol {
   std::string name;

@@ -140,6 +140,9 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
   // First pass: register types, using declarations, and function signatures
   for (const ast::DeclPtr &decl : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
+      if (using_decl->namespace_name != "io") {
+        error_at(using_decl->location, "Unknown module '" + using_decl->namespace_name + "'.");
+      }
       used_.insert(using_decl->namespace_name);
       if (using_decl->is_namespace) {
         opened_.insert(using_decl->namespace_name);
@@ -269,6 +272,9 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
             }
           }
         }
+      }
+      for (const auto &method : impl_decl->methods) {
+        check_function(*method);
       }
       continue;
     }
@@ -1310,10 +1316,38 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     if (method_it != method_registry_.end()) {
       const auto *method_decl = method_it->second.decl;
       Type fn(TypeKind::Function);
-      fn.return_type = std::make_unique<Type>(resolve_type_expr(method_decl->return_type));
-      for (const auto &param : method_decl->params) {
-        if (param.name == "self") continue;
-        fn.param_types.push_back(resolve_type_expr(param.type));
+      if (method_decl) {
+        fn.return_type = std::make_unique<Type>(resolve_type_expr(method_decl->return_type));
+        for (const auto &param : method_decl->params) {
+          if (param.name == "self") continue;
+          fn.param_types.push_back(resolve_type_expr(param.type));
+        }
+      } else {
+        auto trait_impls_it = trait_impls_.find(obj_type.name);
+        if (trait_impls_it != trait_impls_.end()) {
+          for (const auto &trait_name : trait_impls_it->second) {
+            auto trait_it = trait_registry_.find(trait_name);
+            if (trait_it == trait_registry_.end()) continue;
+            for (const auto &tm : trait_it->second->methods) {
+              if (tm.name == field_access->field_name) {
+                auto resolve_self = [&](const ast::TypeExpr &te) -> Type {
+                  if (te.name == "Self") return resolve_type_name(obj_type.name);
+                  return resolve_type_expr(te);
+                };
+                fn.return_type = std::make_unique<Type>(resolve_self(tm.return_type));
+                for (const auto &param : tm.params) {
+                  if (param.name == "self") continue;
+                  fn.param_types.push_back(resolve_self(param.type));
+                }
+                break;
+              }
+            }
+            if (fn.return_type) break;
+          }
+        }
+        if (!fn.return_type) {
+          fn.return_type = std::make_unique<Type>(void_type());
+        }
       }
       return fn;
     }

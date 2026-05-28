@@ -1,0 +1,90 @@
+using io;
+
+// ===== Trait 定义 =====
+trait Shape {
+  float area(self);
+  string describe(self);
+}
+
+trait Named {
+  string greet(self, string other);
+}
+
+// ===== 结构体 =====
+struct Circle {
+  float radius;
+}
+
+struct Rect {
+  float width;
+  float height;
+}
+
+struct Person {
+  string name;
+}
+
+// ===== Inherent methods（自身方法，不属于 trait）=====
+impl Circle {
+  float circumference(self) {
+    return 2.0 * 3.14 * self.radius;
+  }
+}
+
+// ===== Trait 实现 =====
+impl Circle : Shape {
+  float area(self) {
+    return 3.14 * self.radius * self.radius;
+  }
+
+  string describe(self) {
+    return "circle";
+  }
+}
+
+impl Rect : Shape {
+  float area(self) {
+    return self.width * self.height;
+  }
+
+  string describe(self) {
+    return "rect";
+  }
+}
+
+impl Person : Named {
+  string greet(self, string other) {
+    return "Hi " + other + ", I'm " + self.name;
+  }
+}
+
+int main() {
+  Circle c { 5.0 };
+  Rect r { 3.0, 4.0 };
+  Person p { "Alice" };
+
+  // 1. Trait 方法调用
+  io::out.line("=== Area ===");
+  io::out("Circle area: {}\n", c.area());
+  io::out("Rect area: {}\n", r.area());
+
+  // 2. Inherent method（自身方法）
+  io::out.line("=== Circumference ===");
+  io::out("Circle circumference: {}\n", c.circumference());
+
+  // 3. Trait describe 方法
+  io::out.line("=== Describe ===");
+  io::out("{}\n", c.describe());
+  io::out("{}\n", r.describe());
+
+  // 4. Trait 方法带参数
+  io::out.line("=== Greet ===");
+  io::out("{}\n", p.greet("Bob"));
+
+  // 5. 链式调用
+  io::out.line("=== Area again ===");
+  float total = c.area() + r.area();
+  io::out("Total area: {}\n", total);
+
+  return 0;
+}

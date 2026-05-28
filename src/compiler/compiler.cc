@@ -93,6 +93,7 @@ CompileResult Compiler::compile(const ast::Program &program) {
               });
               uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
               function_indices_[mangled] = static_cast<int>(const_idx);
+              method_return_types_[mangled] = trait_method.return_type.name;
             }
           }
         }
