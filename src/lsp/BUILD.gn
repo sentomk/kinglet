@@ -3,6 +3,8 @@ static_library("lsp") {
     "analysis.cc",
     "analysis.h",
     "completion_context.h",
+    "completion_resolver.cc",
+    "completion_resolver.h",
     "completion_token.cc",
     "completion_token.h",
     "document_store.cc",
