@@ -234,6 +234,22 @@ CASES = [
      "using |\n",
      ["io"],
      ["import", "struct", "fun", ""]),
+
+    # fs / sys namespaces complete after `using` and expose their members.
+    ("using_namespace_fs_sys",
+     "using |\n",
+     ["io", "fs", "sys"],
+     ["import", "struct"]),
+
+    ("namespace_fs",
+     "using fs;\nfn main() {\n  fs::|\n}\n",
+     ["__read", "__write"],
+     ["out", "args"]),
+
+    ("namespace_sys",
+     "using sys;\nfn main() {\n  sys::|\n}\n",
+     ["args"],
+     ["__read", "out"]),
 ]
 
 

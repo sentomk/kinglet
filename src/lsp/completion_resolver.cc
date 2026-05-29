@@ -177,20 +177,20 @@ void CompletionResolver::add_decl_keywords(json::Array &items) {
 }
 
 void CompletionResolver::add_namespace_completions(json::Array &items) {
-  if (analysis_.used_namespaces.count("io") || analysis_.opened_namespaces.count("io")) {
-    for (const char *ns : {"io"}) {
-      if (!matches_prefix(ns)) continue;
-      json::Object item;
-      item["label"] = json::Value::string(ns);
-      item["kind"] = json::Value::number(9);
-      item["detail"] = json::Value::string("namespace");
-      item["insertText"] = json::Value::string(std::string(ns) + "::");
-      json::Object cmd;
-      cmd["title"] = json::Value::string("");
-      cmd["command"] = json::Value::string("editor.action.triggerSuggest");
-      item["command"] = json::Value(cmd);
-      items.push_back(json::Value(item));
-    }
+  for (const char *ns : {"io", "fs", "sys"}) {
+    if (!analysis_.used_namespaces.count(ns) && !analysis_.opened_namespaces.count(ns))
+      continue;
+    if (!matches_prefix(ns)) continue;
+    json::Object item;
+    item["label"] = json::Value::string(ns);
+    item["kind"] = json::Value::number(9);
+    item["detail"] = json::Value::string("namespace");
+    item["insertText"] = json::Value::string(std::string(ns) + "::");
+    json::Object cmd;
+    cmd["title"] = json::Value::string("");
+    cmd["command"] = json::Value::string("editor.action.triggerSuggest");
+    item["command"] = json::Value(cmd);
+    items.push_back(json::Value(item));
   }
   // Imported namespaces (`import "..." as foo;`) — insert "foo::" and re-trigger.
   for (const auto &ns : analysis_.imported_namespaces) {
@@ -482,6 +482,21 @@ json::Array CompletionResolver::resolve_namespace_access(const std::string &ns_n
       items.push_back(protocol::completion_item(name, 3, detail));
     }
   }
+  if (ns_name == "fs") {
+    for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
+             {"__read", "fs::__read(path) — read whole file as string, null on failure"},
+             {"__write", "fs::__write(path, content) — write string to file"}}) {
+      if (!matches_prefix(name)) continue;
+      items.push_back(protocol::completion_item(name, 3, detail));
+    }
+  }
+  if (ns_name == "sys") {
+    for (const auto &[name, detail] : std::vector<std::pair<std::string, std::string>>{
+             {"args", "sys::args() — command-line arguments as string[]"}}) {
+      if (!matches_prefix(name)) continue;
+      items.push_back(protocol::completion_item(name, 3, detail));
+    }
+  }
   auto it = analysis_.imported_symbols.find(ns_name);
   if (it != analysis_.imported_symbols.end()) {
     for (const auto &sym : it->second) {
@@ -642,6 +657,8 @@ json::Array CompletionResolver::resolve_using_namespace() {
   json::Array items;
   std::set<std::string> names;
   names.insert("io");
+  names.insert("fs");
+  names.insert("sys");
   // Namespaces made available through imports. used_namespaces is intentionally
   // excluded: it is populated by `using` statements themselves (including the
   // partially-typed one being completed), which would echo back as noise.

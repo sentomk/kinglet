@@ -99,9 +99,17 @@ void print_token(const kinglet::Token &token) {
 int main(int argc, char **argv) {
   std::string input_path;
   Mode mode = Mode::Run;
+  std::vector<std::string> program_args;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg(argv[i]);
+    // Once an input file is set, everything after it is forwarded to the
+    // program verbatim (so `kinglet script.kl --foo bar` passes `--foo bar`
+    // to sys::args(), not to the interpreter).
+    if (!input_path.empty()) {
+      program_args.emplace_back(arg);
+      continue;
+    }
     if (arg == "-h" || arg == "--help") {
       print_usage(std::cout);
       return 0;
@@ -121,11 +129,6 @@ int main(int argc, char **argv) {
     if (arg == "--repl") {
       mode = Mode::Repl;
       continue;
-    }
-    if (!input_path.empty()) {
-      std::cerr << "kinglet: expected at most one input file\n";
-      print_usage(std::cerr);
-      return 64;
     }
     input_path = std::string(arg);
   }
@@ -352,7 +355,7 @@ int main(int argc, char **argv) {
   }
 
   kinglet::Vm vm;
-  kinglet::VmResult vm_result = vm.run(compile_result.chunk);
+  kinglet::VmResult vm_result = vm.run(compile_result.chunk, program_args);
   if (!vm_result.ok) {
     std::cerr << "runtime error: " << vm_result.error << '\n';
     return 70;

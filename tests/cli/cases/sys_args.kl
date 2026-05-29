@@ -1,0 +1,11 @@
+using io;
+using sys;
+
+int main() {
+  string[] argv = sys::args();
+  io::out.line("argc: {}", argv.len());
+  for (int i = 0; i < argv.len(); i = i + 1) {
+    io::out.line("arg: {}", argv[i]);
+  }
+  return 0;
+}

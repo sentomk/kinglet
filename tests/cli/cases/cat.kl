@@ -1,0 +1,18 @@
+using io;
+using fs;
+using sys;
+
+int main() {
+  string[] argv = sys::args();
+  if (argv.len() < 1) {
+    io::err.line("usage: cat <file>");
+    return 1;
+  }
+  string content = fs::__read(argv[0]);
+  if (content == null) {
+    io::err.line("cat: cannot read {}", argv[0]);
+    return 1;
+  }
+  io::out(content);
+  return 0;
+}

@@ -692,7 +692,7 @@ json::Value Server::handle_semantic_tokens(const json::Value &params) {
       else if (type_names.count(name)) token_type = TT::Type;
       else if (enum_names.count(name)) token_type = TT::Enum;
       else if (func_names.count(name)) token_type = TT::Function;
-      else if (name == "io") token_type = TT::Namespace;
+      else if (name == "io" || name == "fs" || name == "sys") token_type = TT::Namespace;
       else token_type = TT::Variable;
       break;
     }

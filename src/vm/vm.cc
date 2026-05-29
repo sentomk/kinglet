@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -15,9 +18,10 @@
 #endif
 namespace kinglet {
 
-VmResult Vm::run(const Chunk &chunk) {
+VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
   stack_.clear();
   frames_.clear();
+  program_args_ = args;
   frames_.push_back(CallFrame{.chunk = &chunk, .ip = 0, .locals = {}});
 
   while (!frames_.empty()) {
@@ -238,6 +242,47 @@ VmResult Vm::run(const Chunk &chunk) {
             std::cout << '\n';
           }
           break;
+        case NativeFn::FsRead: {
+          if (args.size() != 1 || args[0].type != ValueType::String) {
+            push(Value::null_value());
+            break;
+          }
+          std::ifstream file(args[0].string_storage, std::ios::binary);
+          if (!file) {
+            push(Value::null_value());
+            break;
+          }
+          std::ostringstream buffer;
+          buffer << file.rdbuf();
+          if (file.bad()) {
+            push(Value::null_value());
+            break;
+          }
+          push(Value::string_value(buffer.str()));
+          break;
+        }
+        case NativeFn::FsWrite: {
+          if (args.size() == 2 && args[0].type == ValueType::String &&
+              args[1].type == ValueType::String) {
+            std::ofstream file(args[0].string_storage,
+                               std::ios::binary | std::ios::trunc);
+            if (file) {
+              file.write(args[1].string_storage.data(),
+                         static_cast<std::streamsize>(args[1].string_storage.size()));
+            }
+          }
+          push(Value::null_value());
+          break;
+        }
+        case NativeFn::SysArgs: {
+          std::vector<Value> elements;
+          elements.reserve(program_args_.size());
+          for (const std::string &arg : program_args_) {
+            elements.push_back(Value::string_value(arg));
+          }
+          push(Value::array_value(std::move(elements)));
+          break;
+        }
         }
         break;
       }
@@ -500,6 +545,69 @@ VmResult Vm::run(const Chunk &chunk) {
         restore_echo();
         std::cout << '\n';
       }
+      break;
+    }
+    case OpCode::NativeFsRead: {
+      const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
+      if (arg_count != 1) {
+        return runtime_error("fs::__read expects exactly one argument.");
+      }
+      if (stack_.empty()) {
+        return runtime_error("Stack underflow for fs::__read.");
+      }
+      Value path = pop();
+      if (path.type != ValueType::String) {
+        return runtime_error("fs::__read expects a string path.");
+      }
+      std::ifstream file(path.string_storage, std::ios::binary);
+      if (!file) {
+        push(Value::null_value());
+        break;
+      }
+      std::ostringstream buffer;
+      buffer << file.rdbuf();
+      if (file.bad()) {
+        push(Value::null_value());
+        break;
+      }
+      push(Value::string_value(buffer.str()));
+      break;
+    }
+    case OpCode::NativeFsWrite: {
+      const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
+      if (arg_count != 2) {
+        return runtime_error("fs::__write expects exactly two arguments.");
+      }
+      if (stack_.size() < 2) {
+        return runtime_error("Stack underflow for fs::__write.");
+      }
+      Value content = pop();
+      Value path = pop();
+      if (path.type != ValueType::String) {
+        return runtime_error("fs::__write expects a string path.");
+      }
+      if (content.type != ValueType::String) {
+        return runtime_error("fs::__write expects string content.");
+      }
+      std::ofstream file(path.string_storage, std::ios::binary | std::ios::trunc);
+      if (file) {
+        file.write(content.string_storage.data(),
+                   static_cast<std::streamsize>(content.string_storage.size()));
+      }
+      push(Value::null_value());
+      break;
+    }
+    case OpCode::NativeSysArgs: {
+      const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
+      if (arg_count != 0) {
+        return runtime_error("sys::args expects no arguments.");
+      }
+      std::vector<Value> elements;
+      elements.reserve(program_args_.size());
+      for (const std::string &arg : program_args_) {
+        elements.push_back(Value::string_value(arg));
+      }
+      push(Value::array_value(std::move(elements)));
       break;
     }
     case OpCode::StructNew: {

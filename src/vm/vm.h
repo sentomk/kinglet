@@ -22,7 +22,7 @@ struct VmResult {
 
 class Vm {
 public:
-  VmResult run(const Chunk &chunk);
+  VmResult run(const Chunk &chunk, const std::vector<std::string> &args = {});
 
 private:
   bool push(Value value);
@@ -34,6 +34,7 @@ private:
 
   std::vector<Value> stack_;
   std::vector<CallFrame> frames_;
+  std::vector<std::string> program_args_;
 };
 
 } // namespace kinglet

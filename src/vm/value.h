@@ -28,6 +28,9 @@ enum class NativeFn {
   IoErrLine,
   IoIn,
   IoInSecret,
+  FsRead,
+  FsWrite,
+  SysArgs,
 };
 
 struct Value;

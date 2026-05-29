@@ -140,7 +140,8 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
   // First pass: register types, using declarations, and function signatures
   for (const ast::DeclPtr &decl : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
-      if (using_decl->namespace_name != "io") {
+      if (using_decl->namespace_name != "io" && using_decl->namespace_name != "fs" &&
+          using_decl->namespace_name != "sys") {
         error_at(using_decl->location, "Unknown module '" + using_decl->namespace_name + "'.");
       }
       used_.insert(using_decl->namespace_name);
@@ -623,6 +624,38 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         return fn;
       }
     }
+    if (ns_access->namespace_name == "fs") {
+      if (used_.count("fs") == 0) {
+        error_at(ns_access->location,
+                 "Module 'fs' is not imported. Add 'using fs;' at the top of the file.");
+        return void_type();
+      }
+      if (ns_access->member_name == "__read") {
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(string_type());
+        return fn;
+      }
+      if (ns_access->member_name == "__write") {
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(void_type());
+        return fn;
+      }
+    }
+    if (ns_access->namespace_name == "sys") {
+      if (used_.count("sys") == 0) {
+        error_at(ns_access->location,
+                 "Module 'sys' is not imported. Add 'using sys;' at the top of the file.");
+        return void_type();
+      }
+      if (ns_access->member_name == "args") {
+        Type fn(TypeKind::Function);
+        fn.name = "native_fn";
+        fn.return_type = std::make_shared<Type>(array_type(string_type()));
+        return fn;
+      }
+    }
     // Check for imported function (e.g. math::add)
     auto imported = lookup_var(ns_access->namespace_name + "::" + ns_access->member_name);
     if (imported.has_value()) return *imported;
@@ -777,6 +810,55 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         }
         return string_type();
       }
+    }
+
+    // Handle fs::__read(path) -> string, fs::__write(path, content) -> void.
+    if (ns_callee && ns_callee->namespace_name == "fs") {
+      if (used_.count("fs") == 0) {
+        error_at(ns_callee->location,
+                 "Module 'fs' is not imported. Add 'using fs;' at the top of the file.");
+        return void_type();
+      }
+      if (ns_callee->member_name == "__read") {
+        if (call_expr->args.size() != 1) {
+          error_at(call_expr->location, "fs::__read expects exactly one argument (path).");
+        } else if (check_expr(*call_expr->args[0]).kind != TypeKind::String) {
+          error_at(call_expr->args[0]->location, "fs::__read expects a string path.");
+        }
+        return string_type();
+      }
+      if (ns_callee->member_name == "__write") {
+        if (call_expr->args.size() != 2) {
+          error_at(call_expr->location, "fs::__write expects exactly two arguments (path, content).");
+        } else {
+          if (check_expr(*call_expr->args[0]).kind != TypeKind::String) {
+            error_at(call_expr->args[0]->location, "fs::__write expects a string path.");
+          }
+          if (check_expr(*call_expr->args[1]).kind != TypeKind::String) {
+            error_at(call_expr->args[1]->location, "fs::__write expects string content.");
+          }
+        }
+        return void_type();
+      }
+      error_at(ns_callee->location, "Unknown fs member '" + ns_callee->member_name + "'.");
+      return void_type();
+    }
+
+    // Handle sys::args() -> string[].
+    if (ns_callee && ns_callee->namespace_name == "sys") {
+      if (used_.count("sys") == 0) {
+        error_at(ns_callee->location,
+                 "Module 'sys' is not imported. Add 'using sys;' at the top of the file.");
+        return void_type();
+      }
+      if (ns_callee->member_name == "args") {
+        if (!call_expr->args.empty()) {
+          error_at(call_expr->location, "sys::args expects no arguments.");
+        }
+        return array_type(string_type());
+      }
+      error_at(ns_callee->location, "Unknown sys member '" + ns_callee->member_name + "'.");
+      return void_type();
     }
 
     // Handle enum variant construction with payload: Shape::Circle(1.0)

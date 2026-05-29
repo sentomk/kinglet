@@ -77,6 +77,37 @@ run_contains_case() {
   done
 }
 
+# Like run_case but forwards extra arguments to the program (sys::args()).
+# Usage: run_args_case <name> <expected_exit> <expected_stdout> <expected_stderr> [program args...]
+run_args_case() {
+  local name="$1"
+  local expected_exit="$2"
+  local expected_stdout="$3"
+  local expected_stderr="$4"
+  shift 4
+  local source="$ROOT/tests/cli/cases/$name.kl"
+  local stdout="$TMP_DIR/$name.stdout"
+  local stderr="$TMP_DIR/$name.stderr"
+
+  "$KINGLET" "$source" "$@" >"$stdout" 2>"$stderr"
+  local actual_exit=$?
+  sed -i 's/\r$//' "$stdout" "$stderr"
+
+  if [[ "$actual_exit" -ne "$expected_exit" ]]; then
+    fail "$name exit: expected $expected_exit, got $actual_exit"
+  fi
+  if ! diff -u <(printf "%s" "$expected_stdout") "$stdout" >/dev/null; then
+    echo "stdout mismatch for $name:" >&2
+    diff -u <(printf "%s" "$expected_stdout") "$stdout" >&2
+    FAILURES=$((FAILURES + 1))
+  fi
+  if ! diff -u <(printf "%s" "$expected_stderr") "$stderr" >/dev/null; then
+    echo "stderr mismatch for $name:" >&2
+    diff -u <(printf "%s" "$expected_stderr") "$stderr" >&2
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 cd "$ROOT" || exit 1
 ninja -C out/Debug >/dev/null
 
@@ -164,6 +195,18 @@ run_case "impl_basic" "run" 0 $'7\n13 24\n' ""
 # --- Trait System ---
 run_case "trait_basic" "run" 0 $'point\n97\n' ""
 run_case "trait_default" "run" 0 $'42\n' ""
+
+# --- File system (fs) + system args (sys) ---
+# Roundtrip: write then read back the same content.
+run_case "fs_roundtrip" "run" 0 $'hello fs\n' ""
+# Reading a nonexistent file returns null (caller checks for null).
+run_case "fs_read_missing" "run" 0 $'missing is null\n' ""
+# sys::args() forwards everything after the script name to the program.
+run_args_case "sys_args" 0 $'argc: 3\narg: alpha\narg: beta\narg: --flag\n' "" alpha beta --flag
+# sys::args() with no arguments yields an empty list.
+run_args_case "sys_args" 0 $'argc: 0\n' ""
+# End-to-end self-hosting I/O smoke test: cat reads its argument file.
+run_args_case "cat" 0 $'hello fs\n' "" "$ROOT/tests/cli/cases/cat_fixture.txt"
 
 if [[ "$FAILURES" -ne 0 ]]; then
   echo "$FAILURES CLI golden test(s) failed." >&2

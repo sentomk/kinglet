@@ -815,6 +815,38 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       }
     }
 
+    // Handle fs::__read(...) / fs::__write(...) direct calls.
+    if (ns_callee && used_.count("fs") != 0 && ns_callee->namespace_name == "fs") {
+      if (ns_callee->member_name == "__read") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeFsRead, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+      if (ns_callee->member_name == "__write") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeFsWrite, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+    }
+
+    // Handle sys::args() direct call.
+    if (ns_callee && used_.count("sys") != 0 && ns_callee->namespace_name == "sys") {
+      if (ns_callee->member_name == "args") {
+        for (const ast::ExprPtr &arg : call_expr->args) {
+          compile_expr(*arg);
+        }
+        emit_operand(OpCode::NativeSysArgs, static_cast<uint32_t>(call_expr->args.size()),
+                     call_expr->location);
+        return;
+      }
+    }
+
     // Handle enum variant construction with payload: Shape::Circle(1.0)
     if (ns_callee) {
       auto enum_it = enum_indices_.find(ns_callee->namespace_name);
@@ -1263,6 +1295,30 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         fn = NativeFn::IoIn;
       } else {
         error_at(ns_access->location, "Unknown io member '" + ns_access->member_name + "'.");
+        return;
+      }
+      emit_constant(Value::native_function_value(fn), ns_access->location);
+      return;
+    }
+    if (ns_access->namespace_name == "fs" && used_.count("fs") != 0) {
+      NativeFn fn;
+      if (ns_access->member_name == "__read") {
+        fn = NativeFn::FsRead;
+      } else if (ns_access->member_name == "__write") {
+        fn = NativeFn::FsWrite;
+      } else {
+        error_at(ns_access->location, "Unknown fs member '" + ns_access->member_name + "'.");
+        return;
+      }
+      emit_constant(Value::native_function_value(fn), ns_access->location);
+      return;
+    }
+    if (ns_access->namespace_name == "sys" && used_.count("sys") != 0) {
+      NativeFn fn;
+      if (ns_access->member_name == "args") {
+        fn = NativeFn::SysArgs;
+      } else {
+        error_at(ns_access->location, "Unknown sys member '" + ns_access->member_name + "'.");
         return;
       }
       emit_constant(Value::native_function_value(fn), ns_access->location);

@@ -1,0 +1,9 @@
+using io;
+using fs;
+
+int main() {
+  fs::__write("/tmp/kl_fs_roundtrip.txt", "hello fs");
+  string content = fs::__read("/tmp/kl_fs_roundtrip.txt");
+  io::out.line(content);
+  return 0;
+}

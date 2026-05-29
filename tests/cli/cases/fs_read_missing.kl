@@ -1,0 +1,12 @@
+using io;
+using fs;
+
+int main() {
+  string missing = fs::__read("/tmp/kl_does_not_exist_zzz.txt");
+  if (missing == null) {
+    io::out.line("missing is null");
+  } else {
+    io::out.line("unexpected: {}", missing);
+  }
+  return 0;
+}
