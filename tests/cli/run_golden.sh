@@ -171,3 +171,10 @@ if [[ "$FAILURES" -ne 0 ]]; then
 fi
 
 echo "CLI golden tests passed."
+
+# --- LSP completion tests ---
+ninja -C out/Debug kinglet-lsp >/dev/null
+if ! python3 "$ROOT/tests/lsp/completion_driver.py"; then
+  echo "LSP completion test(s) failed." >&2
+  exit 1
+fi
