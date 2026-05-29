@@ -25,11 +25,18 @@ std::string ModuleLoader::derive_namespace(const std::string &path) const {
 
 void ModuleLoader::register_source_file(const std::string &path) {
   std::filesystem::path p(path);
-  if (p.is_absolute()) {
-    source_files_.insert(std::filesystem::canonical(p).string());
-  } else {
-    source_files_.insert(std::filesystem::canonical(std::filesystem::path(base_dir_) / path).string());
+  std::filesystem::path target = p.is_absolute()
+                                     ? p
+                                     : std::filesystem::path(base_dir_) / path;
+  std::error_code ec;
+  std::filesystem::path canonical = std::filesystem::canonical(target, ec);
+  if (ec) {
+    // File may not exist on disk yet (e.g. unsaved LSP buffer); fall back to
+    // a lexical normalization so registration never throws.
+    canonical = std::filesystem::weakly_canonical(target, ec);
+    if (ec) canonical = target.lexically_normal();
   }
+  source_files_.insert(canonical.string());
 }
 
 ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
