@@ -1,0 +1,15 @@
+using io;
+
+int main() {
+  int[] buckets = [];
+  buckets.resize(8, -1);
+  io::out.line("{} {} {}", buckets.len(), buckets[0], buckets[7]);
+  buckets[3] = 42;
+  io::out.line("{}", buckets[3]);
+  buckets.resize(2, 0);
+  io::out.line("{}", buckets.len());
+  string[] names = [];
+  names.resize(3, "?");
+  io::out.line("{} {} {}", names[0], names[1], names[2]);
+  return 0;
+}

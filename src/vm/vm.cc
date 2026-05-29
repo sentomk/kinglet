@@ -80,6 +80,51 @@ VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
       push(Value::int_value(~value.int_value_storage));
       break;
     }
+    case OpCode::BitAnd:
+    case OpCode::BitOr:
+    case OpCode::BitXor:
+    case OpCode::Shl:
+    case OpCode::Shr: {
+      if (stack_.size() < 2) {
+        return runtime_error("Stack underflow.");
+      }
+      if (stack_[stack_.size() - 1].type != ValueType::Int ||
+          stack_[stack_.size() - 2].type != ValueType::Int) {
+        return runtime_error("Bitwise operands must be integers.");
+      }
+      Value right = pop();
+      Value left = pop();
+      int64_t l = left.int_value_storage;
+      int64_t r = right.int_value_storage;
+      int64_t result = 0;
+      switch (instruction.op) {
+      case OpCode::BitAnd:
+        result = l & r;
+        break;
+      case OpCode::BitOr:
+        result = l | r;
+        break;
+      case OpCode::BitXor:
+        result = l ^ r;
+        break;
+      case OpCode::Shl:
+      case OpCode::Shr:
+        // A shift amount outside [0, 63] is undefined in C++; define it here as
+        // yielding 0 so Kinglet programs get deterministic behaviour.
+        if (r < 0 || r >= 64) {
+          result = 0;
+        } else if (instruction.op == OpCode::Shl) {
+          result = static_cast<int64_t>(static_cast<uint64_t>(l) << r);
+        } else {
+          result = static_cast<int64_t>(static_cast<uint64_t>(l) >> r);
+        }
+        break;
+      default:
+        break;
+      }
+      push(Value::int_value(result));
+      break;
+    }
     case OpCode::Negate: {
       if (stack_.empty() || !stack_.back().is_number()) {
         return runtime_error("Operand must be numeric.");
@@ -793,6 +838,24 @@ VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
         return runtime_error("Cannot call push() on non-array value.");
       }
       array.array_storage->elements.push_back(value);
+      push(Value::null_value());
+      break;
+    }
+    case OpCode::ArrayResize: {
+      Value default_value = pop();
+      Value count = pop();
+      Value array = pop();
+      if (array.type != ValueType::Array || !array.array_storage) {
+        return runtime_error("Cannot call resize() on non-array value.");
+      }
+      if (count.type != ValueType::Int) {
+        return runtime_error("resize() count must be an integer.");
+      }
+      if (count.int_value_storage < 0) {
+        return runtime_error("resize() count must be non-negative.");
+      }
+      array.array_storage->elements.resize(
+          static_cast<std::size_t>(count.int_value_storage), default_value);
       push(Value::null_value());
       break;
     }

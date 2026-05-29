@@ -22,6 +22,26 @@ std::string type_to_string(const Type &type) {
   return oss.str();
 }
 
+// Recursively replace type-parameter names with their concrete arguments
+// anywhere they appear in a TypeExpr, including nested positions like the
+// element of an array (`T[]` => `Array<T>`) or another generic's argument
+// (`Box<T>`). A non-recursive, top-level-only substitution misses these.
+ast::TypeExpr substitute_type_params(
+    const ast::TypeExpr &expr,
+    const std::unordered_map<std::string, ast::TypeExpr> &subst) {
+  if (expr.type_args.empty()) {
+    auto it = subst.find(expr.name);
+    if (it != subst.end()) return it->second;
+    return expr;
+  }
+  ast::TypeExpr result;
+  result.name = expr.name;
+  for (const auto &arg : expr.type_args) {
+    result.type_args.push_back(substitute_type_params(arg, subst));
+  }
+  return result;
+}
+
 } // namespace
 
 Type TypeChecker::resolve_type_name(const std::string &name) const {
@@ -114,13 +134,10 @@ void TypeChecker::instantiate_generic_struct(const ast::StructDecl *decl, const 
   Type struct_type(TypeKind::Struct);
   struct_type.name = mangled;
   for (const auto &field : decl->fields) {
-    ast::TypeExpr resolved_field_type = field.type;
-    auto sub_it = subst.find(field.type.name);
-    if (sub_it != subst.end() && field.type.type_args.empty()) {
-      resolved_field_type = sub_it->second;
-    }
+    ast::TypeExpr resolved_field_type = substitute_type_params(field.type, subst);
     Type ft = resolve_type_expr(resolved_field_type);
-    struct_type.fields.push_back(FieldInfo{field.name, ft.kind, ft.name});
+    struct_type.fields.push_back(
+        FieldInfo{field.name, ft.kind, ft.name, std::make_shared<Type>(ft)});
   }
   type_registry_.insert_or_assign(mangled, struct_type);
 }
@@ -162,7 +179,8 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
         struct_type.name = struct_decl->name;
         for (const auto &field : struct_decl->fields) {
           Type ft = resolve_type_expr(field.type);
-          struct_type.fields.push_back(FieldInfo{field.name, ft.kind, ft.name});
+          struct_type.fields.push_back(
+              FieldInfo{field.name, ft.kind, ft.name, std::make_shared<Type>(ft)});
         }
         type_registry_.insert_or_assign(struct_decl->name, struct_type);
       }
@@ -747,6 +765,16 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     case ast::BinaryOp::And:
     case ast::BinaryOp::Or:
       return bool_type();
+
+    case ast::BinaryOp::BitAnd:
+    case ast::BinaryOp::BitOr:
+    case ast::BinaryOp::BitXor:
+    case ast::BinaryOp::Shl:
+    case ast::BinaryOp::Shr:
+      if (left_type.kind != TypeKind::Int || right_type.kind != TypeKind::Int) {
+        error_at(binary->location, "Bitwise operators require integer operands.");
+      }
+      return int_type();
     }
   }
 
@@ -941,6 +969,24 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
               error_at(call_expr->args[0]->location,
                        "push() expects " + type_to_string(*obj_type.element_type) +
                            ", got " + type_to_string(arg_type) + ".");
+            }
+          }
+          return void_type();
+        }
+        if (method == "resize") {
+          if (call_expr->args.size() != 2) {
+            error_at(call_expr->location, "resize() takes exactly 2 arguments (count, default).");
+          } else {
+            Type count_type = check_expr(*call_expr->args[0]);
+            if (count_type.kind != TypeKind::Int) {
+              error_at(call_expr->args[0]->location, "resize() count must be an Int.");
+            }
+            Type default_type = check_expr(*call_expr->args[1]);
+            if (obj_type.element_type &&
+                !default_type.is_compatible_with(*obj_type.element_type)) {
+              error_at(call_expr->args[1]->location,
+                       "resize() default expects " + type_to_string(*obj_type.element_type) +
+                           ", got " + type_to_string(default_type) + ".");
             }
           }
           return void_type();
@@ -1320,6 +1366,8 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       if (fields_def[i].type_kind == TypeKind::Struct && !fields_def[i].type_name.empty()) {
         auto reg_it = type_registry_.find(fields_def[i].type_name);
         if (reg_it != type_registry_.end()) expected = reg_it->second;
+      } else if (fields_def[i].type) {
+        expected = *fields_def[i].type;
       }
       if (!val_type.is_compatible_with(expected)) {
         error_at(struct_lit->fields[i].value->location,
@@ -1359,7 +1407,7 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       if (method == "len" || method == "push" || method == "pop" ||
           method == "remove" || method == "contains" || method == "clear" ||
           method == "insert" || method == "index_of" || method == "slice" ||
-          method == "reverse") {
+          method == "reverse" || method == "resize") {
         return void_type();
       }
       error_at(field_access->location, "Array has no method '" + method + "'.");
@@ -1390,6 +1438,9 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
           auto reg_it = type_registry_.find(f.type_name);
           if (reg_it != type_registry_.end()) return reg_it->second;
         }
+        // Prefer the full resolved type, which retains array element_type and
+        // other detail that type_kind alone drops.
+        if (f.type) return *f.type;
         return Type(f.type_kind);
       }
     }
@@ -1451,6 +1502,8 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
         if (f.type_kind == TypeKind::Struct && !f.type_name.empty()) {
           auto reg_it = type_registry_.find(f.type_name);
           if (reg_it != type_registry_.end()) field_type = reg_it->second;
+        } else if (f.type) {
+          field_type = *f.type;
         }
         if (!value_type.is_compatible_with(field_type)) {
           error_at(field_assign->location,

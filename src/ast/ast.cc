@@ -47,6 +47,16 @@ const char *binary_op_name(BinaryOp op) {
     return "&&";
   case BinaryOp::Or:
     return "||";
+  case BinaryOp::BitAnd:
+    return "&";
+  case BinaryOp::BitOr:
+    return "|";
+  case BinaryOp::BitXor:
+    return "^";
+  case BinaryOp::Shl:
+    return "<<";
+  case BinaryOp::Shr:
+    return ">>";
   }
   return "?";
 }

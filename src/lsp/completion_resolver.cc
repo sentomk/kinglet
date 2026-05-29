@@ -431,7 +431,8 @@ json::Array CompletionResolver::resolve_field_access(const std::string &receiver
              {"insert", "void — insert at index"},
              {"index_of", "int — find element"},
              {"slice", "T[] — sub-array"},
-             {"reverse", "void — reverse in place"}}) {
+             {"reverse", "void — reverse in place"},
+             {"resize", "void — grow/shrink to n, filling with default"}}) {
       if (!matches_prefix(name)) continue;
       items.push_back(protocol::completion_item(name, 2, detail, name + "($1)", 2));
     }

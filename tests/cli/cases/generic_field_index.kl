@@ -1,0 +1,19 @@
+using io;
+
+struct Holder<T> { T[] items; }
+struct Map<K, V> { K[] keys; V[] vals; }
+
+int main() {
+  Holder<int> h { [] };
+  h.items.push(10);
+  h.items.push(20);
+  io::out.line("{} {}", h.items[0], h.items.len());
+
+  Map<string, int> m { [], [] };
+  m.keys.push("one");
+  m.vals.push(1);
+  io::out.line("{} {}", m.keys[0], m.vals[0]);
+  m.vals[0] = 99;
+  io::out.line("{}", m.vals[0]);
+  return 0;
+}

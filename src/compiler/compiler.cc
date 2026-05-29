@@ -746,6 +746,21 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     case ast::BinaryOp::Ge:
       emit(OpCode::Ge, binary->location);
       break;
+    case ast::BinaryOp::BitAnd:
+      emit(OpCode::BitAnd, binary->location);
+      break;
+    case ast::BinaryOp::BitOr:
+      emit(OpCode::BitOr, binary->location);
+      break;
+    case ast::BinaryOp::BitXor:
+      emit(OpCode::BitXor, binary->location);
+      break;
+    case ast::BinaryOp::Shl:
+      emit(OpCode::Shl, binary->location);
+      break;
+    case ast::BinaryOp::Shr:
+      emit(OpCode::Shr, binary->location);
+      break;
     default:
       error_at(binary->location, "Unsupported binary operator.");
       break;
@@ -914,7 +929,7 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       if (method == "len" || method == "push" || method == "pop" ||
           method == "remove" || method == "contains" || method == "clear" ||
           method == "insert" || method == "index_of" || method == "slice" ||
-          method == "reverse" || method == "starts_with" ||
+          method == "reverse" || method == "resize" || method == "starts_with" ||
           method == "ends_with" || method == "replace" || method == "split" ||
           method == "trim" || method == "to_upper" || method == "to_lower") {
         compile_expr(*field_callee->object);
@@ -925,6 +940,12 @@ void Compiler::compile_expr(const ast::Expr &expr) {
         if (method == "push") {
           compile_expr(*call_expr->args[0]);
           emit(OpCode::ArrayPush, call_expr->location);
+          return;
+        }
+        if (method == "resize") {
+          compile_expr(*call_expr->args[0]);
+          compile_expr(*call_expr->args[1]);
+          emit(OpCode::ArrayResize, call_expr->location);
           return;
         }
         if (method == "pop") {

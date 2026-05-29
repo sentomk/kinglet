@@ -59,8 +59,12 @@ private:
   ast::ExprPtr pipeline();
   ast::ExprPtr logical_or();
   ast::ExprPtr logical_and();
+  ast::ExprPtr bit_or();
+  ast::ExprPtr bit_xor();
+  ast::ExprPtr bit_and();
   ast::ExprPtr equality();
   ast::ExprPtr comparison();
+  ast::ExprPtr shift();
   ast::ExprPtr term();
   ast::ExprPtr factor();
   ast::ExprPtr unary();

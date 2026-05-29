@@ -143,6 +143,16 @@ const char *opcode_name(OpCode op) {
     return "Not";
   case OpCode::BitNot:
     return "BitNot";
+  case OpCode::BitAnd:
+    return "BitAnd";
+  case OpCode::BitOr:
+    return "BitOr";
+  case OpCode::BitXor:
+    return "BitXor";
+  case OpCode::Shl:
+    return "Shl";
+  case OpCode::Shr:
+    return "Shr";
   case OpCode::LoadLocal:
     return "LoadLocal";
   case OpCode::StoreLocal:
@@ -205,6 +215,8 @@ const char *opcode_name(OpCode op) {
     return "ArrayLen";
   case OpCode::ArrayPush:
     return "ArrayPush";
+  case OpCode::ArrayResize:
+    return "ArrayResize";
   case OpCode::ArrayPop:
     return "ArrayPop";
   case OpCode::ArrayRemove:

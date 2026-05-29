@@ -122,6 +122,15 @@ run_case "operators_arithmetic" "run" 0 $'13\n7\n30\n3\n1\n-5\n-6\n' ""
 run_case "operators_comparison" "run" 0 $'true\ntrue\ntrue\ntrue\ntrue\nfalse\n' ""
 run_case "operators_logic" "run" 0 $'true\nfalse\nfalse\ntrue\ntrue\nfalse\nfalse\ntrue\nshort-circuit:\ndone\n' ""
 
+# --- Bitwise operators ---
+run_case "bitwise_ops" "run" 0 $'16\n64\n4\n7\n4\n3\n8\n46532\n' ""
+
+# --- Generic struct field indexing (regression: array field index) ---
+run_case "generic_field_index" "run" 0 $'10 2\none 1\n99\n' ""
+
+# --- Array resize (fixed-capacity preallocation) ---
+run_case "array_resize" "run" 0 $'8 -1 -1\n42\n2\n? ? ?\n' ""
+
 # --- Structs ---
 run_case "structs_basic" "run" 0 $'3 4\n10\n' ""
 

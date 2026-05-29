@@ -1,0 +1,15 @@
+using io;
+
+int main() {
+  io::out.line("{}", 1 << 4);
+  io::out.line("{}", 256 >> 2);
+  io::out.line("{}", 13 & 6);
+  io::out.line("{}", 5 | 2);
+  io::out.line("{}", 5 ^ 1);
+  io::out.line("{}", 1 + 2 & 3);
+  io::out.line("{}", 1 + 1 << 2);
+  int h = 5381;
+  h = ((h << 5) + h) ^ 97;
+  io::out.line("{}", h & 65535);
+  return 0;
+}

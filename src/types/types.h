@@ -20,10 +20,16 @@ enum class TypeKind {
   Array,
 };
 
+struct Type;
+
 struct FieldInfo {
   std::string name;
   TypeKind type_kind;
   std::string type_name;
+  // Full resolved type of the field, retaining information that type_kind alone
+  // loses — notably an array field's element_type. May be null for fields
+  // registered before this was populated; callers fall back to type_kind/name.
+  std::shared_ptr<Type> type;
 };
 
 struct Type {
