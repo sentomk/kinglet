@@ -167,6 +167,36 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
 
   push_scope();
 
+  // Built-in error enums. Pre-registered so fallible operations (cast, parse,
+  // future fs/io) can return Result-shaped values without users having to
+  // declare them. These are Enums with the same shape user enums have, so
+  // match / pattern destructuring / variant construction all work uniformly.
+  {
+    Type cast_err(TypeKind::Enum);
+    cast_err.name = "CastError";
+    cast_err.variants = {"Empty", "NotANumber", "Overflow"};
+    cast_err.variant_param_types.resize(3);
+    cast_err.variant_param_types[1].push_back(string_type()); // NotANumber(string)
+    cast_err.variant_param_types[2].push_back(string_type()); // Overflow(string)
+    type_registry_.insert_or_assign("CastError", cast_err);
+
+    Type int_result(TypeKind::Enum);
+    int_result.name = "IntResult";
+    int_result.variants = {"Ok", "Err"};
+    int_result.variant_param_types.resize(2);
+    int_result.variant_param_types[0].push_back(int_type());
+    int_result.variant_param_types[1].push_back(cast_err);
+    type_registry_.insert_or_assign("IntResult", int_result);
+
+    Type float_result(TypeKind::Enum);
+    float_result.name = "FloatResult";
+    float_result.variants = {"Ok", "Err"};
+    float_result.variant_param_types.resize(2);
+    float_result.variant_param_types[0].push_back(float_type());
+    float_result.variant_param_types[1].push_back(cast_err);
+    type_registry_.insert_or_assign("FloatResult", float_result);
+  }
+
   // First pass: register types, using declarations, and function signatures
   for (const ast::DeclPtr &decl : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {

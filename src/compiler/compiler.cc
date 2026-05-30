@@ -22,6 +22,18 @@ CompileResult Compiler::compile(const ast::Program &program) {
   struct_indices_.clear();
   enum_indices_.clear();
 
+  // Built-in error enums. Type checker registers the same trio; compiler
+  // mirrors them into chunk metadata so variant construction (Ok(v) / Err(e))
+  // and pattern matching emit valid (type_idx, variant_idx) pairs.
+  {
+    EnumMeta cast_err{"CastError", {"Empty", "NotANumber", "Overflow"}, {0, 1, 1}};
+    enum_indices_["CastError"] = chunk_.add_enum_meta(std::move(cast_err));
+    EnumMeta int_result{"IntResult", {"Ok", "Err"}, {1, 1}};
+    enum_indices_["IntResult"] = chunk_.add_enum_meta(std::move(int_result));
+    EnumMeta float_result{"FloatResult", {"Ok", "Err"}, {1, 1}};
+    enum_indices_["FloatResult"] = chunk_.add_enum_meta(std::move(float_result));
+  }
+
   for (const ast::DeclPtr &declaration : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
       used_.insert(using_decl->namespace_name);
@@ -233,6 +245,18 @@ CompileResult Compiler::compile_module(const ast::Program &program) {
   function_indices_.clear();
   struct_indices_.clear();
   enum_indices_.clear();
+
+  // Built-in error enums. Type checker registers the same trio; compiler
+  // mirrors them into chunk metadata so variant construction (Ok(v) / Err(e))
+  // and pattern matching emit valid (type_idx, variant_idx) pairs.
+  {
+    EnumMeta cast_err{"CastError", {"Empty", "NotANumber", "Overflow"}, {0, 1, 1}};
+    enum_indices_["CastError"] = chunk_.add_enum_meta(std::move(cast_err));
+    EnumMeta int_result{"IntResult", {"Ok", "Err"}, {1, 1}};
+    enum_indices_["IntResult"] = chunk_.add_enum_meta(std::move(int_result));
+    EnumMeta float_result{"FloatResult", {"Ok", "Err"}, {1, 1}};
+    enum_indices_["FloatResult"] = chunk_.add_enum_meta(std::move(float_result));
+  }
 
   for (const ast::DeclPtr &declaration : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(declaration.get())) {
