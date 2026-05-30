@@ -291,6 +291,23 @@ void ExprStmt::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
+CastExpr::CastExpr(SourceLocation location, TypeExpr target, ExprPtr value, StmtPtr fallback)
+    : Expr(location), target(std::move(target)), value(std::move(value)),
+      fallback(std::move(fallback)) {}
+
+void CastExpr::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(cast " << target.to_string();
+  print_child(out, *value, indent);
+  if (fallback) {
+    write_indent(out, indent + 1);
+    out << "(else";
+    print_child(out, *fallback, indent + 1);
+    out << ")";
+  }
+  out << ")";
+}
+
 ReturnStmt::ReturnStmt(SourceLocation location, ExprPtr value)
     : Stmt(location), value(std::move(value)) {}
 

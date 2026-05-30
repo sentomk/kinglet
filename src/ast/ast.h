@@ -212,6 +212,19 @@ struct MatchExpr final : Expr {
   std::vector<MatchArm> arms;
 };
 
+// Cast expression: `Type(value)` or `Type(value) else fallback`. The fallback
+// is required for fallible source/target pairs (e.g. string→int) and forbidden
+// for infallible ones; the type checker enforces this. The fallback statement
+// is either an ExprStmt (for `else expr`) or a BlockStmt that must terminate.
+struct CastExpr final : Expr {
+  CastExpr(SourceLocation location, TypeExpr target, ExprPtr value, StmtPtr fallback);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  TypeExpr target;
+  ExprPtr value;
+  StmtPtr fallback;
+};
+
 struct ExprStmt final : Stmt {
   ExprStmt(SourceLocation location, ExprPtr expr);
   void print(std::ostream &out, int indent = 0) const override;
