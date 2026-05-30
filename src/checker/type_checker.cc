@@ -360,9 +360,22 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
           if (mod.program) {
             for (const auto &inner_decl : mod.program->declarations) {
               if (const auto *inner_import = dynamic_cast<const ast::ImportDecl *>(inner_decl.get())) {
-                auto inner_result = module_loader_->load(inner_import->path);
+                auto inner_result = module_loader_->load_from(inner_import->path, mod.resolved_path);
                 if (inner_result.module) {
                   const auto &inner_mod = *inner_result.module;
+                  // Register enums before structs so struct fields whose type
+                  // is one of those enums resolve to TypeKind::Enum (not Void).
+                  for (const auto *ed : inner_mod.public_enums) {
+                    Type et(TypeKind::Enum);
+                    et.name = ed->name;
+                    for (const auto &v : ed->variants) {
+                      et.variants.push_back(v.name);
+                      std::vector<Type> ptypes;
+                      for (const auto &pt : v.param_types) ptypes.push_back(resolve_type_expr(pt));
+                      et.variant_param_types.push_back(std::move(ptypes));
+                    }
+                    type_registry_.insert_or_assign(ed->name, et);
+                  }
                   for (const auto *sd : inner_mod.public_structs) {
                     if (sd->type_params.empty()) {
                       Type st(TypeKind::Struct);
@@ -375,17 +388,6 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
                     } else {
                       generic_structs_[sd->name] = sd;
                     }
-                  }
-                  for (const auto *ed : inner_mod.public_enums) {
-                    Type et(TypeKind::Enum);
-                    et.name = ed->name;
-                    for (const auto &v : ed->variants) {
-                      et.variants.push_back(v.name);
-                      std::vector<Type> ptypes;
-                      for (const auto &pt : v.param_types) ptypes.push_back(resolve_type_expr(pt));
-                      et.variant_param_types.push_back(std::move(ptypes));
-                    }
-                    type_registry_.insert_or_assign(ed->name, et);
                   }
                 }
               }
@@ -406,6 +408,28 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
             }
           }
           // Register structs and enums FIRST so function return types resolve.
+          // Register enums before structs so struct fields whose type is one
+          // of those enums resolve to TypeKind::Enum (not Void).
+          for (const auto *ed : mod.public_enums) {
+            if (!import_decl->selected_symbols.empty()) {
+              bool found = false;
+              for (const auto &s : import_decl->selected_symbols) {
+                if (s == ed->name) { found = true; break; }
+              }
+              if (!found) continue;
+            }
+            Type enum_type(TypeKind::Enum);
+            enum_type.name = ed->name;
+            for (const auto &v : ed->variants) {
+              enum_type.variants.push_back(v.name);
+              std::vector<Type> ptypes;
+              for (const auto &pt : v.param_types) {
+                ptypes.push_back(resolve_type_expr(pt));
+              }
+              enum_type.variant_param_types.push_back(std::move(ptypes));
+            }
+            type_registry_.insert_or_assign(ed->name, enum_type);
+          }
           for (const auto *sd : mod.public_structs) {
             if (!import_decl->selected_symbols.empty()) {
               bool found = false;
@@ -427,27 +451,19 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
               generic_structs_[sd->name] = sd;
             }
           }
-          for (const auto *ed : mod.public_enums) {
-            if (!import_decl->selected_symbols.empty()) {
-              bool found = false;
-              for (const auto &s : import_decl->selected_symbols) {
-                if (s == ed->name) { found = true; break; }
-              }
-              if (!found) continue;
-            }
-            Type enum_type(TypeKind::Enum);
-            enum_type.name = ed->name;
-            for (const auto &v : ed->variants) {
-              enum_type.variants.push_back(v.name);
-              std::vector<Type> ptypes;
-              for (const auto &pt : v.param_types) {
-                ptypes.push_back(resolve_type_expr(pt));
-              }
-              enum_type.variant_param_types.push_back(std::move(ptypes));
-            }
-            type_registry_.insert_or_assign(ed->name, enum_type);
-          }
           // Also register private structs/enums (needed by private helper fns).
+          // Enums first so struct fields whose type is a private enum resolve.
+          for (const auto *ed : mod.private_enums) {
+            Type et(TypeKind::Enum);
+            et.name = ed->name;
+            for (const auto &v : ed->variants) {
+              et.variants.push_back(v.name);
+              std::vector<Type> ptypes;
+              for (const auto &pt : v.param_types) ptypes.push_back(resolve_type_expr(pt));
+              et.variant_param_types.push_back(std::move(ptypes));
+            }
+            type_registry_.insert_or_assign(ed->name, et);
+          }
           for (const auto *sd : mod.private_structs) {
             if (sd->type_params.empty()) {
               Type st(TypeKind::Struct);
@@ -460,17 +476,6 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
             } else {
               generic_structs_[sd->name] = sd;
             }
-          }
-          for (const auto *ed : mod.private_enums) {
-            Type et(TypeKind::Enum);
-            et.name = ed->name;
-            for (const auto &v : ed->variants) {
-              et.variants.push_back(v.name);
-              std::vector<Type> ptypes;
-              for (const auto &pt : v.param_types) ptypes.push_back(resolve_type_expr(pt));
-              et.variant_param_types.push_back(std::move(ptypes));
-            }
-            type_registry_.insert_or_assign(ed->name, et);
           }
           // Now register functions (return types can reference the structs above).
           for (const auto *fn : mod.public_functions) {

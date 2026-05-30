@@ -18,6 +18,15 @@ std::string ModuleLoader::resolve_path(const std::string &relative_path) const {
   return std::filesystem::canonical(resolved).string();
 }
 
+std::string ModuleLoader::resolve_path_from(const std::string &relative_path,
+                                            const std::string &importing_from) const {
+  std::filesystem::path importer(importing_from);
+  std::filesystem::path dir = importer.has_parent_path() ? importer.parent_path()
+                                                         : std::filesystem::path(base_dir_);
+  std::filesystem::path resolved = dir / relative_path;
+  return std::filesystem::canonical(resolved).string();
+}
+
 std::string ModuleLoader::derive_namespace(const std::string &path) const {
   std::filesystem::path p(path);
   return p.stem().string();
@@ -31,8 +40,6 @@ void ModuleLoader::register_source_file(const std::string &path) {
   std::error_code ec;
   std::filesystem::path canonical = std::filesystem::canonical(target, ec);
   if (ec) {
-    // File may not exist on disk yet (e.g. unsaved LSP buffer); fall back to
-    // a lexical normalization so registration never throws.
     canonical = std::filesystem::weakly_canonical(target, ec);
     if (ec) canonical = target.lexically_normal();
   }
@@ -46,13 +53,28 @@ ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
   } catch (const std::filesystem::filesystem_error &) {
     return {nullptr, "Cannot resolve import path: " + path};
   }
+  return load_resolved(resolved, path);
+}
 
+ModuleLoader::LoadResult ModuleLoader::load_from(const std::string &path,
+                                                 const std::string &importing_from) {
+  std::string resolved;
+  try {
+    resolved = resolve_path_from(path, importing_from);
+  } catch (const std::filesystem::filesystem_error &) {
+    return {nullptr, "Cannot resolve import path: " + path};
+  }
+  return load_resolved(resolved, path);
+}
+
+ModuleLoader::LoadResult
+ModuleLoader::load_resolved(const std::string &resolved, const std::string &original_path) {
   if (source_files_.count(resolved)) {
-    return {nullptr, "File cannot import itself: " + path};
+    return {nullptr, "File cannot import itself: " + original_path};
   }
 
   if (loading_.count(resolved)) {
-    return {nullptr, "Circular import detected: " + path};
+    return {nullptr, "Circular import detected: " + original_path};
   }
 
   auto it = cache_.find(resolved);
@@ -62,7 +84,7 @@ ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
 
   std::ifstream file(resolved, std::ios::in | std::ios::binary);
   if (!file) {
-    return {nullptr, "Cannot open file: " + path};
+    return {nullptr, "Cannot open file: " + original_path};
   }
   std::ostringstream buffer;
   buffer << file.rdbuf();
@@ -75,7 +97,7 @@ ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
   for (const auto &token : tokens) {
     if (token.type == TokenType::ERROR) {
       loading_.erase(resolved);
-      return {nullptr, "Lexer error in " + path + ": " + std::string(token.lexeme)};
+      return {nullptr, "Lexer error in " + original_path + ": " + std::string(token.lexeme)};
     }
   }
 
@@ -83,11 +105,12 @@ ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
   auto parse_result = parser.parse();
   if (!parse_result.errors.empty()) {
     loading_.erase(resolved);
-    return {nullptr, "Parse error in " + path + ": " + parse_result.errors[0].message};
+    return {nullptr, "Parse error in " + original_path + ": " + parse_result.errors[0].message};
   }
 
   ParsedModule mod;
-  mod.namespace_name = derive_namespace(path);
+  mod.namespace_name = derive_namespace(original_path);
+  mod.resolved_path = resolved;
 
   for (const auto &decl : parse_result.program->declarations) {
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {

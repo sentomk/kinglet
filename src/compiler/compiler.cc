@@ -1676,12 +1676,19 @@ void Compiler::warning_at(ast::SourceLocation location, std::string message) {
 }
 
 void Compiler::process_import(const ast::ImportDecl &import_decl) {
+  process_import_from(import_decl, "");
+}
+
+void Compiler::process_import_from(const ast::ImportDecl &import_decl,
+                                    const std::string &importer_path) {
   if (!module_loader_) {
     error_at(import_decl.location, "Import not supported (no module loader configured).");
     return;
   }
 
-  auto result = module_loader_->load(import_decl.path);
+  auto result = importer_path.empty()
+                    ? module_loader_->load(import_decl.path)
+                    : module_loader_->load_from(import_decl.path, importer_path);
   if (!result.module) {
     error_at(import_decl.location, result.error);
     return;
@@ -1695,7 +1702,7 @@ void Compiler::process_import(const ast::ImportDecl &import_decl) {
   if (mod.program) {
     for (const auto &inner_decl : mod.program->declarations) {
       if (const auto *inner_import = dynamic_cast<const ast::ImportDecl *>(inner_decl.get())) {
-        process_import(*inner_import);
+        process_import_from(*inner_import, mod.resolved_path);
       }
     }
   }
