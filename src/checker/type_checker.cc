@@ -197,6 +197,30 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
     type_registry_.insert_or_assign("FloatResult", float_result);
   }
 
+  // Pre-pass: register every struct/enum *name* with an empty body before
+  // resolving any field types. Without this, a struct or enum that
+  // references itself (or a peer declared later) — e.g.
+  //   enum Expr { Add(Expr, Expr) }
+  //   struct Node { Node[] children }
+  // would have its self-reference resolve to Void because the type isn't
+  // in the registry yet at the moment we walk its fields. The pre-pass
+  // installs an empty placeholder so resolve_type_expr can find the name;
+  // the first pass below then overwrites it with the fully-populated Type.
+  for (const ast::DeclPtr &decl : program.declarations) {
+    if (const auto *struct_decl = dynamic_cast<const ast::StructDecl *>(decl.get())) {
+      if (struct_decl->name == "Self") continue;
+      if (!struct_decl->type_params.empty()) continue;
+      Type stub(TypeKind::Struct);
+      stub.name = struct_decl->name;
+      type_registry_.insert_or_assign(struct_decl->name, stub);
+    } else if (const auto *enum_decl = dynamic_cast<const ast::EnumDecl *>(decl.get())) {
+      if (enum_decl->name == "Self") continue;
+      Type stub(TypeKind::Enum);
+      stub.name = enum_decl->name;
+      type_registry_.insert_or_assign(enum_decl->name, stub);
+    }
+  }
+
   // First pass: register types, using declarations, and function signatures
   for (const ast::DeclPtr &decl : program.declarations) {
     if (const auto *using_decl = dynamic_cast<const ast::UsingDecl *>(decl.get())) {
@@ -1724,6 +1748,16 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
       }
       error_at(field_access->location, "Cannot access field on non-struct type.");
       return int_type();
+    }
+    // The Type we hold in obj_type may be a stale snapshot taken when a
+    // forward-referenced struct still had its forward-declaration stub
+    // (no fields populated yet). Re-resolve via the registry by name to
+    // pick up the now-fully-populated definition before walking fields.
+    if (!obj_type.name.empty()) {
+      auto reg_it = type_registry_.find(obj_type.name);
+      if (reg_it != type_registry_.end() && reg_it->second.kind == TypeKind::Struct) {
+        obj_type = reg_it->second;
+      }
     }
     for (const auto &f : obj_type.fields) {
       if (f.name == field_access->field_name) {

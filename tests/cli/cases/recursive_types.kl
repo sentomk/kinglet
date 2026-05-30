@@ -1,0 +1,52 @@
+using io;
+
+// Recursive enum: an Expr can contain other Exprs.
+// Regression: pre-pass must register the name `Expr` before its variants'
+// param types are resolved.
+enum Expr {
+  Num(int),
+  Add(Expr, Expr),
+}
+
+int eval(Expr e) {
+  return e match {
+    Expr::Num(let n) => n,
+    Expr::Add(let a, let b) => eval(a) + eval(b),
+  };
+}
+
+// Self-referencing struct via array field.
+struct Tree {
+  int value;
+  Tree[] children;
+}
+
+int sum(Tree t) {
+  int s = t.value;
+  for (int i = 0; i < t.children.len(); i = i + 1) {
+    s = s + sum(t.children[i]);
+  }
+  return s;
+}
+
+// Forward reference: Outer's field references Inner declared after.
+struct Outer {
+  Inner[] items;
+}
+struct Inner {
+  int n;
+}
+
+int main() {
+  Expr e = Expr::Add(Expr::Num(1), Expr::Add(Expr::Num(2), Expr::Num(3)));
+  io::out.line("{}", eval(e));
+
+  Tree leaf1 = Tree { 10, [] };
+  Tree leaf2 = Tree { 20, [] };
+  Tree root = Tree { 1, [leaf1, leaf2] };
+  io::out.line("{}", sum(root));
+
+  Outer o = Outer { [Inner { 7 }, Inner { 8 }] };
+  io::out.line("{}", o.items[0].n + o.items[1].n);
+  return 0;
+}

@@ -222,6 +222,9 @@ run_args_case "cat" 0 $'hello fs\n' "" "$ROOT/tests/cli/cases/cat_fixture.txt"
 run_case "map_basic" "run" 0 $'len=3\na=1\nmissing=null\nhas_b=true\nhas_b_after=false\nlen_after=2\nkeys_len=2\nx=10 y=20\nidx0=zero idx1=one\nhas0=true\n' ""
 run_case "map_symbol_table" "run" 0 $'found: x kind=1\nz not found\ntotal=2\n  x -> kind=1\n  y -> kind=2\n' ""
 
+# --- Recursive / forward-referenced types ---
+run_case "recursive_types" "run" 0 $'6\n31\n15\n' ""
+
 # --- Type casts: T(value) [else fallback] ---
 run_case "cast_basic" "run" 0 $'42\n3\nn=123\nf=2.5\n42\n-1\n1.5\n0\n' ""
 run_case "cast_else_block" "run" 0 $'123\nparse-failed:oops\n99\n' ""
