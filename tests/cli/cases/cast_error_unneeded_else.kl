@@ -1,0 +1,4 @@
+int main() {
+  int a = int(3.14) else 0;
+  return a;
+}

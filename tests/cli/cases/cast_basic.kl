@@ -1,0 +1,21 @@
+using io;
+
+int main() {
+  // infallible: int <-> float
+  io::out.line("{}", float(42));
+  io::out.line("{}", int(3.75));
+
+  // infallible: number -> string (concat-style use)
+  io::out.line("n=" + string(123));
+  io::out.line("f=" + string(2.5));
+
+  // fallible string -> int
+  io::out.line("{}", int("42") else -1);
+  io::out.line("{}", int("abc") else -1);
+
+  // fallible string -> float
+  io::out.line("{}", float("1.5") else 0.0);
+  io::out.line("{}", float("nope") else 0.0);
+
+  return 0;
+}

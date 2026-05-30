@@ -1,0 +1,15 @@
+using io;
+
+int run(string s, int dflt) {
+  int n = int(s) else {
+    io::out.line("parse-failed:{}", s);
+    return dflt;
+  };
+  return n;
+}
+
+int main() {
+  io::out.line("{}", run("123", 0));
+  io::out.line("{}", run("oops", 99));
+  return 0;
+}
