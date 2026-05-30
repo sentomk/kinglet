@@ -1,9 +1,14 @@
 using io;
 using fs;
+using sys;
 
 int main() {
-  fs::__write("/tmp/kl_fs_roundtrip.txt", "hello fs");
-  string content = fs::__read("/tmp/kl_fs_roundtrip.txt");
+  string[] args = sys::args();
+  string tmp = "/tmp";
+  if (args.len() > 0) { tmp = args[0]; }
+  string path = tmp + "/kl_fs_roundtrip.txt";
+  fs::__write(path, "hello fs");
+  string content = fs::__read(path);
   io::out.line(content);
   return 0;
 }

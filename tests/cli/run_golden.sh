@@ -206,8 +206,9 @@ run_case "trait_basic" "run" 0 $'point\n97\n' ""
 run_case "trait_default" "run" 0 $'42\n' ""
 
 # --- File system (fs) + system args (sys) ---
-# Roundtrip: write then read back the same content.
-run_case "fs_roundtrip" "run" 0 $'hello fs\n' ""
+# Roundtrip: write then read back the same content. Pass $TMP_DIR so the
+# test works on Windows (no /tmp) and other platforms alike.
+run_args_case "fs_roundtrip" 0 $'hello fs\n' "" "$TMP_DIR"
 # Reading a nonexistent file returns null (caller checks for null).
 run_case "fs_read_missing" "run" 0 $'missing is null\n' ""
 # sys::args() forwards everything after the script name to the program.
