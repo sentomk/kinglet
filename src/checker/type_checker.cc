@@ -896,6 +896,81 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     }
   }
 
+  if (const auto *cast = dynamic_cast<const ast::CastExpr *>(&expr)) {
+    Type value_type = check_expr(*cast->value);
+    Type target = resolve_type_expr(cast->target, cast->location);
+
+    // Cast target must be a primitive scalar; compound types (arrays, maps,
+    // structs, enums) have no canonical conversion and parser already restricts
+    // syntax to bare type keywords, so this is a defensive check.
+    bool target_ok = target.kind == TypeKind::Int || target.kind == TypeKind::Float ||
+                     target.kind == TypeKind::String;
+    if (!target_ok) {
+      error_at(cast->location, "Cast target must be int, float, or string.");
+      return target;
+    }
+
+    // Same-type cast is a no-op and almost always a typo — reject.
+    if (value_type.kind == target.kind) {
+      error_at(cast->location, "Redundant cast: source and target are both " +
+                                   type_to_string(target) + ".");
+      return target;
+    }
+
+    bool infallible = false;
+    bool fallible = false;
+
+    // int <-> float: numeric reinterpretation, never fails (truncates toward 0).
+    if ((value_type.kind == TypeKind::Int && target.kind == TypeKind::Float) ||
+        (value_type.kind == TypeKind::Float && target.kind == TypeKind::Int)) {
+      infallible = true;
+    }
+    // numeric -> string: format, never fails.
+    else if ((value_type.kind == TypeKind::Int || value_type.kind == TypeKind::Float) &&
+             target.kind == TypeKind::String) {
+      infallible = true;
+    }
+    // string -> numeric: parse, may fail.
+    else if (value_type.kind == TypeKind::String &&
+             (target.kind == TypeKind::Int || target.kind == TypeKind::Float)) {
+      fallible = true;
+    }
+    else {
+      error_at(cast->location, "Cannot cast " + type_to_string(value_type) + " to " +
+                                   type_to_string(target) + ".");
+      return target;
+    }
+
+    if (infallible && cast->fallback) {
+      error_at(cast->location, "'else' clause is not allowed: " + type_to_string(value_type) +
+                                   " to " + type_to_string(target) + " never fails.");
+    }
+    if (fallible && !cast->fallback) {
+      error_at(cast->location, "Cast from " + type_to_string(value_type) + " to " +
+                                   type_to_string(target) + " may fail; provide an 'else' clause.");
+    }
+
+    if (cast->fallback) {
+      // For an `else expr` form, parser wrapped the expression in an ExprStmt;
+      // type-check that the expression yields a value compatible with the
+      // cast's target. For `else { ... }` we walk the block as a statement
+      // (no value-producing constraint — the block is expected to terminate,
+      // matching the convention used by guard).
+      if (const auto *fb_expr = dynamic_cast<const ast::ExprStmt *>(cast->fallback.get())) {
+        Type fb_type = check_expr(*fb_expr->expr);
+        if (!fb_type.is_compatible_with(target)) {
+          error_at(cast->fallback->location,
+                   "Fallback yields " + type_to_string(fb_type) + " but cast target is " +
+                       type_to_string(target) + ".");
+        }
+      } else {
+        check_stmt(*cast->fallback, target);
+      }
+    }
+
+    return target;
+  }
+
   if (const auto *assign = dynamic_cast<const ast::AssignExpr *>(&expr)) {
     auto var_type = lookup_var(assign->name);
     if (!var_type.has_value()) {
