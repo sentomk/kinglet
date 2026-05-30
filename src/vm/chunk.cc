@@ -92,6 +92,11 @@ void Chunk::disassemble(std::ostream &out) const {
     } else if (instruction.op == OpCode::Jmp ||
                instruction.op == OpCode::JmpFalse) {
       out << " +" << instruction.operand;
+    } else if (instruction.op == OpCode::CastTo) {
+      const char *kind = instruction.operand == 0 ? "int"
+                       : instruction.operand == 1 ? "float"
+                       : instruction.operand == 2 ? "string" : "?";
+      out << " -> " << kind;
     } else if (instruction.op == OpCode::NativeOut) {
       out << " argc=" << instruction.operand;
     } else if (instruction.op == OpCode::NativeOutLn) {
@@ -161,6 +166,12 @@ const char *opcode_name(OpCode op) {
     return "StoreLocal";
   case OpCode::Pop:
     return "Pop";
+  case OpCode::Dup:
+    return "Dup";
+  case OpCode::IsNull:
+    return "IsNull";
+  case OpCode::CastTo:
+    return "CastTo";
   case OpCode::Call:
     return "Call";
   case OpCode::Return:

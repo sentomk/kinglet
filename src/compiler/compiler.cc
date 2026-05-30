@@ -1309,6 +1309,33 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     return;
   }
 
+  if (const auto *cast_expr = dynamic_cast<const ast::CastExpr *>(&expr)) {
+    compile_expr(*cast_expr->value);
+    uint32_t target_kind = 0;
+    if (cast_expr->target.name == "int") target_kind = 0;
+    else if (cast_expr->target.name == "float") target_kind = 1;
+    else if (cast_expr->target.name == "string") target_kind = 2;
+    emit_operand(OpCode::CastTo, target_kind, cast_expr->location);
+
+    if (cast_expr->fallback) {
+      // CastTo pushes null on parse failure for fallible string→numeric. Test
+      // for null without consuming the value: Dup, IsNull, JmpFalse over the
+      // fallback (JmpFalse pops the bool). On the failure path, drop the null
+      // and execute the fallback expression/block.
+      emit(OpCode::Dup, cast_expr->location);
+      emit(OpCode::IsNull, cast_expr->location);
+      const std::size_t skip_fb = emit_jump(OpCode::JmpFalse, cast_expr->location);
+      emit(OpCode::Pop, cast_expr->location);
+      if (const auto *fb_expr = dynamic_cast<const ast::ExprStmt *>(cast_expr->fallback.get())) {
+        compile_expr(*fb_expr->expr);
+      } else {
+        compile_stmt(*cast_expr->fallback);
+      }
+      patch_jump(skip_fb);
+    }
+    return;
+  }
+
   if (const auto *ns_access = dynamic_cast<const ast::NamespaceAccessExpr *>(&expr)) {
     auto enum_it = enum_indices_.find(ns_access->namespace_name);
     if (enum_it != enum_indices_.end()) {

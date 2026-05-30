@@ -214,6 +214,86 @@ VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
       }
       pop();
       break;
+    case OpCode::Dup:
+      if (stack_.empty()) {
+        return runtime_error("Stack underflow.");
+      }
+      stack_.push_back(stack_.back());
+      break;
+    case OpCode::IsNull: {
+      if (stack_.empty()) {
+        return runtime_error("Stack underflow.");
+      }
+      Value v = pop();
+      push(Value::bool_value(v.type == ValueType::Null));
+      break;
+    }
+    case OpCode::CastTo: {
+      if (stack_.empty()) {
+        return runtime_error("Stack underflow.");
+      }
+      Value v = pop();
+      // operand: 0 = int, 1 = float, 2 = string
+      switch (instruction.operand) {
+      case 0: { // -> int
+        if (v.type == ValueType::Int) {
+          push(v);
+        } else if (v.type == ValueType::Double) {
+          push(Value::int_value(static_cast<int64_t>(v.double_value_storage)));
+        } else if (v.type == ValueType::String) {
+          const std::string &s = v.string_storage;
+          if (s.empty()) { push(Value::null_value()); break; }
+          char *end = nullptr;
+          long long parsed = std::strtoll(s.c_str(), &end, 10);
+          if (end == s.c_str() || *end != '\0') {
+            push(Value::null_value());
+          } else {
+            push(Value::int_value(static_cast<int64_t>(parsed)));
+          }
+        } else {
+          return runtime_error("Cannot cast value to int.");
+        }
+        break;
+      }
+      case 1: { // -> float
+        if (v.type == ValueType::Double) {
+          push(v);
+        } else if (v.type == ValueType::Int) {
+          push(Value::double_value(static_cast<double>(v.int_value_storage)));
+        } else if (v.type == ValueType::String) {
+          const std::string &s = v.string_storage;
+          if (s.empty()) { push(Value::null_value()); break; }
+          char *end = nullptr;
+          double parsed = std::strtod(s.c_str(), &end);
+          if (end == s.c_str() || *end != '\0') {
+            push(Value::null_value());
+          } else {
+            push(Value::double_value(parsed));
+          }
+        } else {
+          return runtime_error("Cannot cast value to float.");
+        }
+        break;
+      }
+      case 2: { // -> string
+        std::ostringstream out;
+        if (v.type == ValueType::Int) {
+          out << v.int_value_storage;
+        } else if (v.type == ValueType::Double) {
+          out << v.double_value_storage;
+        } else if (v.type == ValueType::String) {
+          out << v.string_storage;
+        } else {
+          return runtime_error("Cannot cast value to string.");
+        }
+        push(Value::string_value(out.str()));
+        break;
+      }
+      default:
+        return runtime_error("Invalid CastTo target.");
+      }
+      break;
+    }
     case OpCode::Call: {
       const uint32_t arg_count = static_cast<uint32_t>(instruction.operand);
       if (stack_.size() < arg_count + 1) {
