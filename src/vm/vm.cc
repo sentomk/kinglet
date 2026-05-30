@@ -1296,6 +1296,38 @@ VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
       push(Value::string_value(std::move(result)));
       break;
     }
+    case OpCode::StringToInt: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("to_int() requires a string.");
+      }
+      const std::string &s = str.string_storage;
+      if (s.empty()) { push(Value::null_value()); break; }
+      char *end = nullptr;
+      long long v = std::strtoll(s.c_str(), &end, 10);
+      if (end == s.c_str() || *end != '\0') {
+        push(Value::null_value());
+      } else {
+        push(Value::int_value(static_cast<int64_t>(v)));
+      }
+      break;
+    }
+    case OpCode::StringToFloat: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("to_float() requires a string.");
+      }
+      const std::string &s = str.string_storage;
+      if (s.empty()) { push(Value::null_value()); break; }
+      char *end = nullptr;
+      double v = std::strtod(s.c_str(), &end);
+      if (end == s.c_str() || *end != '\0') {
+        push(Value::null_value());
+      } else {
+        push(Value::double_value(v));
+      }
+      break;
+    }
     }
   }
 
