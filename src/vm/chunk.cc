@@ -253,6 +253,10 @@ const char *opcode_name(OpCode op) {
     return "StringToInt";
   case OpCode::StringToFloat:
     return "StringToFloat";
+  case OpCode::StringCode:
+    return "StringCode";
+  case OpCode::StringCodeAt:
+    return "StringCodeAt";
   case OpCode::EnumVariantPayload:
     return "EnumVariantPayload";
   case OpCode::EnumPayloadGet:

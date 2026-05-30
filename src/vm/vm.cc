@@ -1328,6 +1328,37 @@ VmResult Vm::run(const Chunk &chunk, const std::vector<std::string> &args) {
       }
       break;
     }
+    case OpCode::StringCode: {
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("code() requires a string.");
+      }
+      if (str.string_storage.empty()) {
+        push(Value::int_value(-1));
+      } else {
+        push(Value::int_value(static_cast<int64_t>(
+            static_cast<unsigned char>(str.string_storage[0]))));
+      }
+      break;
+    }
+    case OpCode::StringCodeAt: {
+      Value idx = pop();
+      Value str = pop();
+      if (str.type != ValueType::String) {
+        return runtime_error("code_at() requires a string.");
+      }
+      if (idx.type != ValueType::Int) {
+        return runtime_error("code_at() index must be an integer.");
+      }
+      int64_t i = idx.int_value_storage;
+      if (i < 0 || static_cast<std::size_t>(i) >= str.string_storage.size()) {
+        push(Value::int_value(-1));
+      } else {
+        push(Value::int_value(static_cast<int64_t>(
+            static_cast<unsigned char>(str.string_storage[static_cast<std::size_t>(i)]))));
+      }
+      break;
+    }
     }
   }
 

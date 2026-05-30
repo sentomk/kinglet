@@ -76,6 +76,8 @@ enum class OpCode : uint8_t {
   StringToLower,
   StringToInt,
   StringToFloat,
+  StringCode,
+  StringCodeAt,
   EnumVariantPayload,
   EnumPayloadGet,
   MapNew,
