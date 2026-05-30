@@ -1077,6 +1077,31 @@ ast::ExprPtr Parser::primary() {
     set_completion({lsp::CompletionPosition::ExpressionStart, {}, {}, {}, {}, {}, {}});
     return nullptr;
   }
+  // Primitive type keyword followed by '(' is a cast: `int(value) [else fb]`.
+  // Compound types (`int[]`, `Box<int>`) are not allowed as cast targets, so
+  // we deliberately consume only the bare keyword and skip parse_type_expr().
+  if (is_type_start(peek().type) && peek().type != TokenType::IDENTIFIER &&
+      peek().type != TokenType::LEFT_BRACE && peek().type != TokenType::AUTO &&
+      current_ + 1 < tokens_.size() &&
+      tokens_[current_ + 1].type == TokenType::LEFT_PAREN) {
+    const Token &type_token = advance();
+    ast::TypeExpr target{token_text(type_token), {}};
+    consume(TokenType::LEFT_PAREN, "Expected '(' in cast.");
+    ast::ExprPtr value = expression();
+    consume(TokenType::RIGHT_PAREN, "Expected ')' after cast value.");
+    ast::StmtPtr fallback;
+    if (match(TokenType::ELSE)) {
+      if (match(TokenType::LEFT_BRACE)) {
+        fallback = block_statement();
+      } else {
+        const Token &fb_start = peek();
+        ast::ExprPtr fb_expr = expression();
+        fallback = std::make_unique<ast::ExprStmt>(location_of(fb_start), std::move(fb_expr));
+      }
+    }
+    return std::make_unique<ast::CastExpr>(location_of(type_token), std::move(target),
+                                           std::move(value), std::move(fallback));
+  }
   if (match(TokenType::INTEGER)) {
     const Token &literal = previous();
     return std::make_unique<ast::IntLiteralExpr>(location_of(literal), literal.int_value);
