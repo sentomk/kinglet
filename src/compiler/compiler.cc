@@ -1,6 +1,7 @@
 #include "compiler/compiler.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <utility>
 
@@ -1636,6 +1637,18 @@ void Compiler::process_import(const ast::ImportDecl &import_decl) {
   }
 
   const ParsedModule &mod = *result.module;
+
+  // Recursively process imports declared inside the loaded module so that
+  // types and functions it depends on are registered before we compile calls
+  // into it (e.g. scanner.kl imports token.kl for the Token struct).
+  if (mod.program) {
+    for (const auto &inner_decl : mod.program->declarations) {
+      if (const auto *inner_import = dynamic_cast<const ast::ImportDecl *>(inner_decl.get())) {
+        process_import(*inner_import);
+      }
+    }
+  }
+
   std::string ns = import_decl.alias.empty() ? mod.namespace_name : import_decl.alias;
 
   imported_namespaces_.insert(ns);
@@ -1664,6 +1677,82 @@ void Compiler::process_import(const ast::ImportDecl &import_decl) {
     }
 
     imported_function_decls_[ns].push_back(func);
+  }
+
+  // Also register private functions so pub functions can call them.
+  for (const auto *func : mod.private_functions) {
+    if (function_indices_.count(ns + "::" + func->name)) continue;
+    int idx = chunk_.add_function(FunctionInfo{
+        .name = func->name,
+        .entry = 0,
+        .param_count = static_cast<int>(func->params.size()),
+    });
+    uint32_t const_idx = chunk_.add_constant(Value::function_value(idx));
+    function_indices_[ns + "::" + func->name] = static_cast<int>(const_idx);
+    function_indices_[func->name] = static_cast<int>(const_idx);
+    imported_function_decls_[ns].push_back(func);
+  }
+
+  // Register imported pub structs so struct literals and field access compile.
+  for (const auto *sd : mod.public_structs) {
+    if (!import_decl.selected_symbols.empty()) {
+      bool found = false;
+      for (const auto &s : import_decl.selected_symbols) {
+        if (s == sd->name) { found = true; break; }
+      }
+      if (!found) continue;
+    }
+    if (sd->type_params.empty()) {
+      StructMeta meta;
+      meta.name = sd->name;
+      for (const auto &field : sd->fields) {
+        meta.field_names.push_back(field.name);
+      }
+      int idx = chunk_.add_struct_meta(std::move(meta));
+      struct_indices_[sd->name] = idx;
+    }
+  }
+
+  // Register imported pub enums so enum variants compile.
+  for (const auto *ed : mod.public_enums) {
+    if (!import_decl.selected_symbols.empty()) {
+      bool found = false;
+      for (const auto &s : import_decl.selected_symbols) {
+        if (s == ed->name) { found = true; break; }
+      }
+      if (!found) continue;
+    }
+    EnumMeta meta;
+    meta.name = ed->name;
+    for (const auto &v : ed->variants) {
+      meta.variants.push_back(v.name);
+      meta.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));
+    }
+    int idx = chunk_.add_enum_meta(std::move(meta));
+    enum_indices_[ed->name] = idx;
+  }
+
+  // Register private structs/enums (needed by private helper functions).
+  for (const auto *sd : mod.private_structs) {
+    if (struct_indices_.count(sd->name)) continue;
+    if (sd->type_params.empty()) {
+      StructMeta meta;
+      meta.name = sd->name;
+      for (const auto &field : sd->fields) meta.field_names.push_back(field.name);
+      int idx = chunk_.add_struct_meta(std::move(meta));
+      struct_indices_[sd->name] = idx;
+    }
+  }
+  for (const auto *ed : mod.private_enums) {
+    if (enum_indices_.count(ed->name)) continue;
+    EnumMeta meta;
+    meta.name = ed->name;
+    for (const auto &v : ed->variants) {
+      meta.variants.push_back(v.name);
+      meta.variant_param_counts.push_back(static_cast<int>(v.param_types.size()));
+    }
+    int idx = chunk_.add_enum_meta(std::move(meta));
+    enum_indices_[ed->name] = idx;
   }
 }
 

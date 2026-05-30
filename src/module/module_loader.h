@@ -14,8 +14,11 @@ struct ParsedModule {
   std::unique_ptr<ast::Program> program;
   std::string namespace_name;
   std::vector<const ast::FunctionDecl *> public_functions;
+  std::vector<const ast::FunctionDecl *> private_functions;
   std::vector<const ast::StructDecl *> public_structs;
+  std::vector<const ast::StructDecl *> private_structs;
   std::vector<const ast::EnumDecl *> public_enums;
+  std::vector<const ast::EnumDecl *> private_enums;
 };
 
 class ModuleLoader {

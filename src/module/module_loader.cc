@@ -93,10 +93,14 @@ ModuleLoader::LoadResult ModuleLoader::load(const std::string &path) {
     if (const auto *func = dynamic_cast<const ast::FunctionDecl *>(decl.get())) {
       if (func->is_public) {
         mod.public_functions.push_back(func);
+      } else {
+        mod.private_functions.push_back(func);
       }
     } else if (const auto *sd = dynamic_cast<const ast::StructDecl *>(decl.get())) {
       if (sd->is_public) {
         mod.public_structs.push_back(sd);
+      } else {
+        mod.private_structs.push_back(sd);
       }
     } else if (const auto *ed = dynamic_cast<const ast::EnumDecl *>(decl.get())) {
       if (ed->is_public) {

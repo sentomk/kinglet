@@ -1130,6 +1130,7 @@ ast::ExprPtr Parser::primary() {
     std::vector<ast::ExprPtr> values;
     if (!check(TokenType::RIGHT_BRACE)) {
       do {
+        if (check(TokenType::RIGHT_BRACE)) break; // trailing comma
         keys.push_back(expression());
         consume(TokenType::COLON, "Expected ':' between map key and value.");
         values.push_back(expression());
