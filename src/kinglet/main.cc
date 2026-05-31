@@ -4,6 +4,7 @@
 #include "lexer/scanner.h"
 #include "lexer/token.h"
 #include "parser/parser.h"
+#include "vm/chunk.h"
 #include "vm/vm.h"
 
 #include <filesystem>
@@ -23,13 +24,20 @@ enum class Mode {
   Ast,
   Bytecode,
   Repl,
+  Compile,
+  RunKbc,
 };
 
 void print_usage(std::ostream &out) {
   out << "usage: kinglet [--tokens | --ast | --bytecode | --repl] [file.kl]\n"
+      << "       kinglet --compile <file.kl> -o <file.kbc>\n"
+      << "       kinglet --run <file.kbc> [args...]\n"
       << "\n"
       << "Reads Kinglet source from a .kl file, or stdin when file is omitted.\n"
-      << "By default, compiles and runs main().\n";
+      << "By default, compiles and runs main().\n"
+      << "\n"
+      << "--compile  runs the front end and writes the chunk to <file.kbc>.\n"
+      << "--run      loads a previously compiled <file.kbc> and runs it.\n";
 }
 
 std::string read_stdin() {
@@ -98,11 +106,22 @@ void print_token(const kinglet::Token &token) {
 
 int main(int argc, char **argv) {
   std::string input_path;
+  std::string output_path;
   Mode mode = Mode::Run;
   std::vector<std::string> program_args;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg(argv[i]);
+    // -o is a global flag — recognise it before falling through to the
+    // input/program-args trap, so `kinglet --compile foo.kl -o foo.kbc` works.
+    if (arg == "-o") {
+      if (i + 1 >= argc) {
+        std::cerr << "kinglet: -o requires a path\n";
+        return 64;
+      }
+      output_path = argv[++i];
+      continue;
+    }
     // Once an input file is set, everything after it is forwarded to the
     // program verbatim (so `kinglet script.kl --foo bar` passes `--foo bar`
     // to sys::args(), not to the interpreter).
@@ -130,7 +149,49 @@ int main(int argc, char **argv) {
       mode = Mode::Repl;
       continue;
     }
+    if (arg == "--compile") {
+      mode = Mode::Compile;
+      continue;
+    }
+    if (arg == "--run") {
+      mode = Mode::RunKbc;
+      continue;
+    }
     input_path = std::string(arg);
+  }
+
+  if (mode == Mode::Compile && output_path.empty()) {
+    std::cerr << "kinglet: --compile requires -o <file.kbc>\n";
+    return 64;
+  }
+  if (mode == Mode::Compile && input_path.empty()) {
+    std::cerr << "kinglet: --compile requires an input .kl file\n";
+    return 64;
+  }
+  if (mode == Mode::RunKbc && input_path.empty()) {
+    std::cerr << "kinglet: --run requires a .kbc file\n";
+    return 64;
+  }
+
+  if (mode == Mode::RunKbc) {
+    std::ifstream in(input_path, std::ios::in | std::ios::binary);
+    if (!in) {
+      std::cerr << "kinglet: failed to open '" << input_path << "'\n";
+      return 66;
+    }
+    kinglet::Chunk chunk;
+    std::string err;
+    if (!chunk.deserialize(in, &err)) {
+      std::cerr << "kinglet: " << err << '\n';
+      return 65;
+    }
+    kinglet::Vm vm;
+    kinglet::VmResult vm_result = vm.run(chunk, program_args);
+    if (!vm_result.ok) {
+      std::cerr << "runtime error: " << vm_result.error << '\n';
+      return 70;
+    }
+    return 0;
   }
 
   std::string source;
@@ -351,6 +412,19 @@ int main(int argc, char **argv) {
 
   if (mode == Mode::Bytecode) {
     compile_result.chunk.disassemble(std::cout);
+    return 0;
+  }
+
+  if (mode == Mode::Compile) {
+    std::ofstream out(output_path, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!out) {
+      std::cerr << "kinglet: failed to open '" << output_path << "' for writing\n";
+      return 66;
+    }
+    if (!compile_result.chunk.serialize(out)) {
+      std::cerr << "kinglet: failed to serialize bytecode to '" << output_path << "'\n";
+      return 70;
+    }
     return 0;
   }
 

@@ -134,6 +134,14 @@ public:
   const std::vector<Instruction> &instructions() const;
   void disassemble(std::ostream &out) const;
 
+  // Serialise the chunk to a binary stream (.kbc format) so that the bootstrap
+  // can compile a Kinglet program once and execute the artefact later without
+  // re-running the front-end. Constants are limited to scalar values (the same
+  // subset the compiler ever places in the pool); deserialisation rejects any
+  // file with an unexpected magic, version, or constant tag.
+  bool serialize(std::ostream &out) const;
+  bool deserialize(std::istream &in, std::string *error);
+
 private:
   std::vector<Value> constants_;
   std::vector<Instruction> instructions_;
