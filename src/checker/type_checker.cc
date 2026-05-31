@@ -561,6 +561,7 @@ TypeCheckResult TypeChecker::check(const ast::Program &program) {
 
 void TypeChecker::check_function(const ast::FunctionDecl &function) {
   Type return_type = resolve_type_expr(function.return_type, function.location);
+  current_return_type_ = return_type;
 
   push_scope();
 
@@ -1028,6 +1029,123 @@ Type TypeChecker::check_expr(const ast::Expr &expr) {
     }
 
     return target;
+  }
+
+  // --- ?? (null-coalesce / Result unwrap with fallback) ------------------
+  if (const auto *coalesce = dynamic_cast<const ast::NullCoalesceExpr *>(&expr)) {
+    Type left_type = check_expr(*coalesce->left);
+
+    // LHS must be a Result-shaped enum: has Ok(T) and Err(E) variants.
+    if (left_type.kind != TypeKind::Enum) {
+      error_at(coalesce->location, "Left side of ?? must be a Result type, got " +
+                                       type_to_string(left_type) + ".");
+      return left_type;
+    }
+    int ok_idx = -1, err_idx = -1;
+    for (int i = 0; i < static_cast<int>(left_type.variants.size()); ++i) {
+      if (left_type.variants[i] == "Ok") ok_idx = i;
+      if (left_type.variants[i] == "Err") err_idx = i;
+    }
+    if (ok_idx < 0 || err_idx < 0) {
+      error_at(coalesce->location, "Left side of ?? must be a Result type (needs Ok/Err variants), got enum '" +
+                                       left_type.name + "'.");
+      return left_type;
+    }
+
+    // If |e| binding is present, declare e with the Err payload type in a
+    // child scope so it's only visible inside the RHS.
+    Type err_payload = void_type();
+    if (err_idx < static_cast<int>(left_type.variant_param_types.size()) &&
+        !left_type.variant_param_types[err_idx].empty()) {
+      err_payload = left_type.variant_param_types[err_idx][0];
+    }
+    Type ok_payload = void_type();
+    if (ok_idx < static_cast<int>(left_type.variant_param_types.size()) &&
+        !left_type.variant_param_types[ok_idx].empty()) {
+      ok_payload = left_type.variant_param_types[ok_idx][0];
+    }
+
+    if (!coalesce->err_binding.empty()) {
+      push_scope();
+      declare_var(coalesce->err_binding, err_payload, true, coalesce->location);
+    }
+
+    Type right_type = check_expr(*coalesce->right);
+
+    if (!coalesce->err_binding.empty()) {
+      pop_scope();
+    }
+
+    // RHS must be compatible with Ok payload type.
+    if (!right_type.is_compatible_with(ok_payload)) {
+      error_at(coalesce->location, "Right side of ?? yields " + type_to_string(right_type) +
+                                       " but Ok payload is " + type_to_string(ok_payload) + ".");
+    }
+
+    return ok_payload;
+  }
+
+  // --- try expr ----------------------------------------------------------
+  if (const auto *try_expr = dynamic_cast<const ast::TryExpr *>(&expr)) {
+    Type value_type = check_expr(*try_expr->value);
+
+    if (value_type.kind != TypeKind::Enum) {
+      error_at(try_expr->location, "try requires a Result type, got " +
+                                       type_to_string(value_type) + ".");
+      return value_type;
+    }
+    int ok_idx = -1, err_idx = -1;
+    for (int i = 0; i < static_cast<int>(value_type.variants.size()); ++i) {
+      if (value_type.variants[i] == "Ok") ok_idx = i;
+      if (value_type.variants[i] == "Err") err_idx = i;
+    }
+    if (ok_idx < 0 || err_idx < 0) {
+      error_at(try_expr->location, "try requires a Result type (needs Ok/Err variants), got enum '" +
+                                       value_type.name + "'.");
+      return value_type;
+    }
+
+    // On Err, `try` returns Err from the enclosing function. Verify the
+    // enclosing function's return type is a Result whose Err payload matches.
+    if (current_return_type_.kind == TypeKind::Enum) {
+      int fn_err_idx = -1;
+      for (int i = 0; i < static_cast<int>(current_return_type_.variants.size()); ++i) {
+        if (current_return_type_.variants[i] == "Err") fn_err_idx = i;
+      }
+      if (fn_err_idx >= 0) {
+        // Both have Err — check payload compatibility.
+        Type fn_err_payload = void_type();
+        if (fn_err_idx < static_cast<int>(current_return_type_.variant_param_types.size()) &&
+            !current_return_type_.variant_param_types[fn_err_idx].empty()) {
+          fn_err_payload = current_return_type_.variant_param_types[fn_err_idx][0];
+        }
+        Type expr_err_payload = void_type();
+        if (err_idx < static_cast<int>(value_type.variant_param_types.size()) &&
+            !value_type.variant_param_types[err_idx].empty()) {
+          expr_err_payload = value_type.variant_param_types[err_idx][0];
+        }
+        if (!expr_err_payload.is_compatible_with(fn_err_payload)) {
+          error_at(try_expr->location,
+                   "try Err payload " + type_to_string(expr_err_payload) +
+                       " is incompatible with enclosing function's Err payload " +
+                       type_to_string(fn_err_payload) + ".");
+        }
+      } else {
+        error_at(try_expr->location,
+                 "try can only be used in a function that returns a Result type.");
+      }
+    } else {
+      error_at(try_expr->location,
+               "try can only be used in a function that returns a Result type, but enclosing function returns " +
+                   type_to_string(current_return_type_) + ".");
+    }
+
+    Type ok_payload = void_type();
+    if (ok_idx < static_cast<int>(value_type.variant_param_types.size()) &&
+        !value_type.variant_param_types[ok_idx].empty()) {
+      ok_payload = value_type.variant_param_types[ok_idx][0];
+    }
+    return ok_payload;
   }
 
   if (const auto *assign = dynamic_cast<const ast::AssignExpr *>(&expr)) {

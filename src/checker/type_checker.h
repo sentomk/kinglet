@@ -81,6 +81,10 @@ private:
   int loop_depth_ = 0;
   const ast::ExprStmt *implicit_return_stmt_ = nullptr;
   ModuleLoader *module_loader_ = nullptr;
+  // Return type of the function currently being checked, used by `try`
+  // to verify that an early Err return is compatible with the enclosing
+  // function's Result return type.
+  Type current_return_type_{TypeKind::Void};
 };
 
 } // namespace kinglet
