@@ -88,6 +88,15 @@ private:
   ModuleLoader *module_loader_ = nullptr;
   std::unordered_map<std::string, std::string> namespace_aliases_;
   std::unordered_set<std::string> imported_namespaces_;
+  // Modules already processed by process_import_from(), keyed by
+  // resolved absolute path. Prevents pub-fn re-registration when the
+  // same module is reachable via multiple import edges (e.g. ast.kl
+  // imported by both parser.kl and compiler.kl). The second registration
+  // would otherwise create a FunctionInfo with entry=0 that the patch
+  // pass never visits, and calls jump to byte 0 (preamble) → infinite
+  // recursion. See KPL/kinglet/parser/parser.kl:22-26 for the user-facing
+  // symptom.
+  std::unordered_set<std::string> processed_module_paths_;
   std::unordered_map<std::string, std::vector<const ast::FunctionDecl *>> imported_function_decls_;
   std::unordered_map<std::string, std::string> local_types_;
   std::unordered_map<std::string, const ast::TraitDecl *> trait_registry_;

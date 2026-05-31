@@ -1696,6 +1696,21 @@ void Compiler::process_import_from(const ast::ImportDecl &import_decl,
 
   const ParsedModule &mod = *result.module;
 
+  // Dedup by resolved path. If we've already processed this module via
+  // some other import edge, every pub fn would otherwise get a *second*
+  // FunctionInfo (entry=0) plus a fresh Function_ constant. The patch
+  // pass walks fn bodies once per file, so the second registration's
+  // entry stays 0; calls resolved through last-write-wins jump to byte 0
+  // (= preamble) and recurse into main forever.
+  //
+  // Caveat: we don't currently re-bind the alias namespace on a second
+  // import (e.g. `import "x" as a; import "x" as b;` won't make `b::foo`
+  // resolve). No code in the tree exercises that today; revisit if it
+  // does.
+  if (!processed_module_paths_.insert(mod.resolved_path).second) {
+    return;
+  }
+
   // Recursively process imports declared inside the loaded module so that
   // types and functions it depends on are registered before we compile calls
   // into it (e.g. scanner.kl imports token.kl for the Token struct).
