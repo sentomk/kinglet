@@ -146,6 +146,29 @@ struct UnaryExpr final : Expr {
   ExprPtr right;
 };
 
+// `lhs ?? rhs` — if lhs is a Result<T,E>::Ok(v), evaluates to v; otherwise
+// evaluates rhs (which must produce a T or diverge). The optional
+// err_binding form is `lhs ?? |e| rhs`, where the Err's payload is bound
+// to `e` for use inside rhs.
+struct NullCoalesceExpr final : Expr {
+  NullCoalesceExpr(SourceLocation location, ExprPtr left, std::string err_binding, ExprPtr right);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  ExprPtr left;
+  std::string err_binding;  // empty when the |e| form was not used
+  ExprPtr right;
+};
+
+// `try expr` — if expr is a Result<T,E>::Ok(v), evaluates to v. If it is
+// Err(e), returns Err(e) from the enclosing function (whose return type
+// must be Result<_, E> or compatible).
+struct TryExpr final : Expr {
+  TryExpr(SourceLocation location, ExprPtr value);
+  void print(std::ostream &out, int indent = 0) const override;
+
+  ExprPtr value;
+};
+
 struct BinaryExpr final : Expr {
   BinaryExpr(SourceLocation location, ExprPtr left, BinaryOp op, ExprPtr right);
   void print(std::ostream &out, int indent = 0) const override;

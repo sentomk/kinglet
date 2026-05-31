@@ -57,6 +57,7 @@ private:
   ast::ExprPtr expression();
   ast::ExprPtr assignment();
   ast::ExprPtr pipeline();
+  ast::ExprPtr coalesce();
   ast::ExprPtr logical_or();
   ast::ExprPtr logical_and();
   ast::ExprPtr bit_or();

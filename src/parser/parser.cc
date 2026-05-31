@@ -797,7 +797,7 @@ ast::ExprPtr Parser::expression() {
 }
 
 ast::ExprPtr Parser::assignment() {
-  ast::ExprPtr expr = pipeline();
+  ast::ExprPtr expr = coalesce();
   if (has_completion()) return expr;
   if (is_assignment_operator(peek().type)) {
     const Token &op = advance();
@@ -842,6 +842,27 @@ ast::ExprPtr Parser::pipeline() {
     expr = std::make_unique<ast::CallExpr>(loc, std::move(func), std::move(type_args), std::move(args));
   }
   return expr;
+}
+
+ast::ExprPtr Parser::coalesce() {
+  ast::ExprPtr left = pipeline();
+  if (!match(TokenType::QUESTION_QUESTION)) return left;
+  auto loc = location_of(previous());
+  std::string err_binding;
+  if (match(TokenType::PIPE)) {
+    if (!check(TokenType::IDENTIFIER)) {
+      error_at(peek(), "Expected identifier after '|' in '?? |e|' binding.");
+      return left;
+    }
+    err_binding = std::string(advance().lexeme);
+    if (!match(TokenType::PIPE)) {
+      error_at(peek(), "Expected '|' to close '?? |e|' binding.");
+      return left;
+    }
+  }
+  ast::ExprPtr right = coalesce();
+  return std::make_unique<ast::NullCoalesceExpr>(loc, std::move(left),
+                                                  std::move(err_binding), std::move(right));
 }
 
 ast::ExprPtr Parser::logical_or() {
@@ -989,6 +1010,11 @@ ast::ExprPtr Parser::unary() {
     ast::ExprPtr right = unary();
     return std::make_unique<ast::UnaryExpr>(location_of(op), token_to_unary_op(op.type),
                                             std::move(right));
+  }
+  if (check(TokenType::IDENTIFIER) && peek().lexeme == "try") {
+    const Token &op = advance();
+    ast::ExprPtr value = unary();
+    return std::make_unique<ast::TryExpr>(location_of(op), std::move(value));
   }
   return call();
 }

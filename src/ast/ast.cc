@@ -190,6 +190,32 @@ void UnaryExpr::print(std::ostream &out, int indent) const {
   out << ")";
 }
 
+NullCoalesceExpr::NullCoalesceExpr(SourceLocation location, ExprPtr left,
+                                   std::string err_binding, ExprPtr right)
+    : Expr(location), left(std::move(left)), err_binding(std::move(err_binding)),
+      right(std::move(right)) {}
+
+void NullCoalesceExpr::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(coalesce";
+  if (!err_binding.empty()) {
+    out << " |" << err_binding << "|";
+  }
+  print_child(out, *left, indent);
+  print_child(out, *right, indent);
+  out << ")";
+}
+
+TryExpr::TryExpr(SourceLocation location, ExprPtr value)
+    : Expr(location), value(std::move(value)) {}
+
+void TryExpr::print(std::ostream &out, int indent) const {
+  write_indent(out, indent);
+  out << "(try";
+  print_child(out, *value, indent);
+  out << ")";
+}
+
 BinaryExpr::BinaryExpr(SourceLocation location, ExprPtr left, BinaryOp op, ExprPtr right)
     : Expr(location), left(std::move(left)), op(op), right(std::move(right)) {}
 
