@@ -380,6 +380,28 @@ std::string Compiler::infer_struct_type(const ast::Expr &expr) const {
   return "";
 }
 
+std::string Compiler::infer_enum_type(const ast::Expr &expr) const {
+  // For identifiers, look up local_types_ for the enum name.
+  if (const auto *id = dynamic_cast<const ast::IdentifierExpr *>(&expr)) {
+    auto it = local_types_.find(id->name);
+    if (it != local_types_.end() && enum_indices_.count(it->second)) return it->second;
+    return "";
+  }
+  // For namespace-access expressions like IntResult::Ok(42), the namespace
+  // is the enum name.
+  if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(&expr)) {
+    if (enum_indices_.count(ns->namespace_name)) return ns->namespace_name;
+    return "";
+  }
+  // For calls like IntResult::Ok(42), callee is NamespaceAccessExpr.
+  if (const auto *call = dynamic_cast<const ast::CallExpr *>(&expr)) {
+    if (const auto *ns = dynamic_cast<const ast::NamespaceAccessExpr *>(call->callee.get())) {
+      if (enum_indices_.count(ns->namespace_name)) return ns->namespace_name;
+    }
+  }
+  return "";
+}
+
 void Compiler::compile_function(const ast::FunctionDecl &function, const std::string &lookup_name) {
   locals_.clear();
   scope_stack_.clear();
@@ -699,6 +721,11 @@ void Compiler::compile_expr(const ast::Expr &expr) {
     return;
   }
 
+  if (const auto *try_expr = dynamic_cast<const ast::TryExpr *>(&expr)) {
+    compile_try(*try_expr);
+    return;
+  }
+
   if (const auto *identifier = dynamic_cast<const ast::IdentifierExpr *>(&expr)) {
     const int slot = resolve_local(identifier->name);
     if (slot < 0) {
@@ -790,6 +817,11 @@ void Compiler::compile_expr(const ast::Expr &expr) {
       error_at(binary->location, "Unsupported binary operator.");
       break;
     }
+    return;
+  }
+
+  if (const auto *coalesce = dynamic_cast<const ast::NullCoalesceExpr *>(&expr)) {
+    compile_coalesce(*coalesce);
     return;
   }
 
@@ -1546,6 +1578,166 @@ void Compiler::compile_expr(const ast::Expr &expr) {
   }
 
   error_at(expr.location, "Unsupported expression in VM compiler.");
+}
+
+void Compiler::compile_coalesce(const ast::NullCoalesceExpr &coalesce) {
+  // Determine the enum type of the LHS so we can find Ok/Err variant indices.
+  std::string enum_name = infer_enum_type(*coalesce.left);
+  if (enum_name.empty()) {
+    error_at(coalesce.location, "Cannot determine Result type of ?? left side.");
+    return;
+  }
+  auto enum_it = enum_indices_.find(enum_name);
+  if (enum_it == enum_indices_.end()) {
+    error_at(coalesce.location, "Unknown enum type '" + enum_name + "'.");
+    return;
+  }
+  int type_idx = enum_it->second;
+  const auto &meta = chunk_.enum_metas()[static_cast<std::size_t>(type_idx)];
+  int ok_idx = -1, err_idx = -1;
+  for (int i = 0; i < static_cast<int>(meta.variants.size()); ++i) {
+    if (meta.variants[static_cast<std::size_t>(i)] == "Ok") ok_idx = i;
+    if (meta.variants[static_cast<std::size_t>(i)] == "Err") err_idx = i;
+  }
+  if (ok_idx < 0 || err_idx < 0) {
+    error_at(coalesce.location, "'" + enum_name + "' is not a Result type (needs Ok/Err).");
+    return;
+  }
+
+  // Stack layout plan:
+  //   compile LHS                        → stack: [val]
+  //   Dup                                → stack: [val, val]
+  //   construct Err template, Eq         → stack: [val, bool]
+  //   JmpFalse ok_path                   → (pops bool) stack: [val]  (val is Err)
+  //   Pop (the dup'd copy)               → stack: [val]
+  //   [optional: bind err payload to |e|]
+  //   compile RHS
+  //   Jmp end
+  //   ok_path:
+  //     Pop (the original val)            → stack: [dup'd val]
+  //     EnumPayloadGet(0) for Ok payload
+  //   end:
+
+  compile_expr(*coalesce.left);
+  // stack: [val]
+  emit(OpCode::Dup, coalesce.location);
+  // stack: [val, val]
+  uint32_t err_operand = (static_cast<uint32_t>(type_idx) << 16) | static_cast<uint32_t>(err_idx);
+  emit_operand(OpCode::EnumVariant, err_operand, coalesce.location);
+  emit(OpCode::Eq, coalesce.location);
+  // stack: [val, bool]
+  std::size_t ok_jump = emit_jump(OpCode::JmpFalse, coalesce.location);
+  // stack: [val]  (val IS Err)
+
+  // Err path: extract Err payload if |e| binding, discard value otherwise.
+  uint32_t err_bind_slot = 0;
+  if (!coalesce.err_binding.empty()) {
+    // Extract Err payload and bind to e. EnumPayloadGet pops val, pushes payload.
+    // Operand is the field index within the variant's payload (0 = first field).
+    emit_operand(OpCode::EnumPayloadGet, 0, coalesce.location);
+    // stack: [err_payload]
+    err_bind_slot = static_cast<uint32_t>(locals_.size());
+    locals_.push_back(Local{.name = coalesce.err_binding, .is_mutable = true});
+    emit_operand(OpCode::StoreLocal, err_bind_slot, coalesce.location);
+    emit(OpCode::Pop, coalesce.location);
+    // stack: []
+  } else {
+    // Discard the Err value.
+    emit(OpCode::Pop, coalesce.location);
+    // stack: []
+  }
+
+  // Compile RHS — yields the Ok payload type
+  compile_expr(*coalesce.right);
+  std::size_t end_jump = emit_jump(OpCode::Jmp, coalesce.location);
+
+  // Ok path
+  patch_jump(ok_jump);
+  // stack: [val] (val is Ok)
+  // EnumPayloadGet pops val, pushes the payload field.
+  // Operand is the field index within Ok's payload (0 = first field).
+  emit_operand(OpCode::EnumPayloadGet, 0, coalesce.location);
+  // stack: [ok_payload]
+
+  patch_jump(end_jump);
+
+  // Clean up |e| binding
+  if (!coalesce.err_binding.empty()) {
+    locals_.pop_back();
+  }
+}
+
+void Compiler::compile_try(const ast::TryExpr &try_expr) {
+  // try expr: if Ok(v), evaluate to v. If Err(e), return Err(e) from
+  // the enclosing function.
+  //
+  // Uses a temp local to hold the value so both branches can reload it.
+
+  std::string enum_name = infer_enum_type(*try_expr.value);
+  if (enum_name.empty()) {
+    error_at(try_expr.location, "Cannot determine Result type of try expression.");
+    return;
+  }
+  auto enum_it = enum_indices_.find(enum_name);
+  if (enum_it == enum_indices_.end()) {
+    error_at(try_expr.location, "Unknown enum type '" + enum_name + "'.");
+    return;
+  }
+  int type_idx = enum_it->second;
+  const auto &meta = chunk_.enum_metas()[static_cast<std::size_t>(type_idx)];
+  int ok_idx = -1, err_idx = -1;
+  for (int i = 0; i < static_cast<int>(meta.variants.size()); ++i) {
+    if (meta.variants[static_cast<std::size_t>(i)] == "Ok") ok_idx = i;
+    if (meta.variants[static_cast<std::size_t>(i)] == "Err") err_idx = i;
+  }
+  if (ok_idx < 0 || err_idx < 0) {
+    error_at(try_expr.location, "'" + enum_name + "' is not a Result type (needs Ok/Err).");
+    return;
+  }
+
+  // Uses a temp local so both branches can reload the value:
+  //   Store val in temp slot, test is-Ok, branch:
+  //   Ok path: reload → EnumPayloadGet(0) → result
+  //   Err path: reload → Return (early exit from fn)
+
+  const uint32_t temp_slot = static_cast<uint32_t>(locals_.size());
+  locals_.push_back(Local{.name = "__try_temp", .is_mutable = false});
+
+  compile_expr(*try_expr.value);
+  // stack: [val]
+  emit_operand(OpCode::StoreLocal, temp_slot, try_expr.location);
+  emit(OpCode::Pop, try_expr.location);
+  // stack: []
+
+  // Test: is it Ok?
+  emit_operand(OpCode::LoadLocal, temp_slot, try_expr.location);
+  // stack: [val]
+  uint32_t ok_operand = (static_cast<uint32_t>(type_idx) << 16) | static_cast<uint32_t>(ok_idx);
+  emit_operand(OpCode::EnumVariant, ok_operand, try_expr.location);
+  emit(OpCode::Eq, try_expr.location);
+  // stack: [bool]
+  std::size_t err_jump = emit_jump(OpCode::JmpFalse, try_expr.location);
+  // stack: []  (it IS Ok)
+
+  // Ok path: extract payload
+  emit_operand(OpCode::LoadLocal, temp_slot, try_expr.location);
+  // EnumPayloadGet pops the enum, pushes the payload field (field 0 = Ok's value).
+  emit_operand(OpCode::EnumPayloadGet, 0, try_expr.location);
+  // stack: [ok_payload]
+  std::size_t end_jump = emit_jump(OpCode::Jmp, try_expr.location);
+
+  // Err path: return Err from enclosing function
+  patch_jump(err_jump);
+  // stack: []
+  emit_operand(OpCode::LoadLocal, temp_slot, try_expr.location);
+  // stack: [val]  (which is Err)
+  emit(OpCode::Return, try_expr.location);
+
+  // End
+  patch_jump(end_jump);
+  // stack: [ok_payload]
+
+  locals_.pop_back(); // __try_temp
 }
 
 void Compiler::compile_assignment(const ast::AssignExpr &assign) {

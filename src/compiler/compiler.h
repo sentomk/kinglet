@@ -52,6 +52,8 @@ private:
   void compile_stmt(const ast::Stmt &stmt);
   void compile_expr(const ast::Expr &expr);
   void compile_assignment(const ast::AssignExpr &assign);
+  void compile_coalesce(const ast::NullCoalesceExpr &coalesce);
+  void compile_try(const ast::TryExpr &try_expr);
 
   void emit(OpCode op, ast::SourceLocation location);
   void emit_operand(OpCode op, uint32_t operand, ast::SourceLocation location);
@@ -69,6 +71,7 @@ private:
   void process_import_from(const ast::ImportDecl &import_decl,
                            const std::string &importer_path);
   std::string infer_struct_type(const ast::Expr &expr) const;
+  std::string infer_enum_type(const ast::Expr &expr) const;
 
   Chunk chunk_;
   std::vector<Local> locals_;
